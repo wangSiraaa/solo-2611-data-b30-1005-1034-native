@@ -1,0 +1,27 @@
+{
+  "name": "cross-system-trap",
+  "note": "旧版: 浅A/深A 同属 A湖系, 深A 是 浅A 的支湖; 浅B 属 B湖系。新版第2格填平后, 深度2 全连成一片, 深度3 仍是 深A 的小块。两个迁名各自取『单看重合最大』的新块——浅B->深度2大块(重合3), 深A->深度3小块(重合1)——同时采用时, 深A 在新版被 B湖系 的浅B 包含, 等于把 A 的旧支湖错挂到 B 湖系。正确做法是让浅A 领深度2大块(重合2), 使深A 仍附属于本系的浅A。",
+  "height": 1,
+  "width": 6,
+  "ceiling": 4,
+  "old": {
+    "tiles": [
+      {"tile_id": "RIDGE", "revision": 1, "row": 0, "col": 0, "values": [[1, 2, 4, 2, 2, 2]]}
+    ]
+  },
+  "new": {
+    "tiles": [
+      {"tile_id": "RIDGE", "revision": 2, "row": 0, "col": 0, "values": [[1, 2, 2, 2, 2, 2]]}
+    ]
+  },
+  "thresholds": [2, 3],
+  "old_names": [
+    {"name": "浅A", "importance": 2, "system": "A湖系", "threshold": 2,
+     "cells": [[0, 0], [0, 1]], "allowed_thresholds": [2]},
+    {"name": "深A", "importance": 5, "system": "A湖系", "threshold": 3,
+     "cells": [[0, 0]], "allowed_thresholds": [3]},
+    {"name": "浅B", "importance": 4, "system": "B湖系", "threshold": 2,
+     "cells": [[0, 3], [0, 4], [0, 5]], "allowed_thresholds": [2]}
+  ],
+  "max_names": 3
+}
