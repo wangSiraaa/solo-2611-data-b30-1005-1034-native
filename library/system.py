@@ -8,6 +8,8 @@ from typing import Any
 from . import db
 from .catalog import CatalogService
 from .ledger import LedgerService
+from .rights import RightsService
+from .royalties import RoyaltyService
 
 
 class LibrarySystem:
@@ -16,6 +18,8 @@ class LibrarySystem:
         self.conn = db.connect(db_path)
         self.catalog = CatalogService(self.conn)
         self.ledger = LedgerService(self.conn, self.catalog)
+        self.rights = RightsService(self.conn)
+        self.royalties = RoyaltyService(self.conn)
 
     @classmethod
     def reopen(cls, db_path: str) -> "LibrarySystem":
