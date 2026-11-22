@@ -22,6 +22,7 @@ from typing import Any
 
 from .catalog import Catalog
 from .publisher import Publisher
+from .renovation import run_material_file
 
 
 def run_material(path: str | Path, db_dir: str | Path | None = None) -> dict[str, Any]:
@@ -83,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("input", help="path to input.json")
     run_parser.add_argument("--db-dir", default=None, help="directory for catalog.db/plans.db")
 
+    renovate_parser = sub.add_parser(
+        "renovate", help="align two plates, diff them, and price sand transfer"
+    )
+    renovate_parser.add_argument("input", help="path to a renovation material.json")
+    renovate_parser.add_argument("--db-dir", default=None, help="directory for plate catalogs")
+
     verify_parser = sub.add_parser("verify", help="verify a stored plan")
     verify_parser.add_argument("db_dir")
     verify_parser.add_argument("plan_id")
@@ -94,6 +101,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "run":
         report = run_material(args.input, args.db_dir)
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+    if args.command == "renovate":
+        db_dir = Path(args.db_dir) if args.db_dir else Path(tempfile.mkdtemp(prefix="slabwater-renov-"))
+        report = run_material_file(args.input, db_dir)
+        report["db_dir"] = str(db_dir)
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0
     db_dir = Path(args.db_dir)

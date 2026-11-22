@@ -1,0 +1,53 @@
+{
+  "height": 1,
+  "width": 3,
+  "ceiling": 9,
+  "description": "1x3 desktop sample: old [2,0,0], target [0,0,2] in its own direction; same endpoints, two-direction lanes, outsource 1 / buy 3.",
+  "old_tiles": [
+    {"tile_id": "OLD", "revision": 1, "row": 0, "col": 0, "values": [[2, 0, 0]]}
+  ],
+  "target_tiles": [
+    {"tile_id": "NEW", "revision": 1, "row": 0, "col": 0, "values": [[0, 0, 2]]}
+  ],
+  "old_markers": {"L": [0, 0], "M": [0, 1], "R": [0, 2]},
+  "target_markers": {"L": [0, 0], "M": [0, 1], "R": [0, 2]},
+  "vertical_correction": 0,
+  "price": {"outsource": 1, "buy": 3},
+  "lanes": [
+    {"from": [0, 0], "to": [0, 1], "capacity": 2, "cost": 1},
+    {"from": [0, 1], "to": [0, 2], "capacity": 2, "cost": 1}
+  ],
+  "scenarios": [
+    {
+      "id": "same_direction",
+      "tickets": [
+        {"id": "t-L", "old": "L", "targets": ["L"]},
+        {"id": "t-R", "old": "R", "targets": ["R"]}
+      ]
+    },
+    {
+      "id": "flipped",
+      "tickets": [
+        {"id": "t-L", "old": "L", "targets": ["R"]},
+        {"id": "t-R", "old": "R", "targets": ["L"]}
+      ]
+    },
+    {
+      "id": "reduced_first_lane",
+      "tickets": [
+        {"id": "t-L", "old": "L", "targets": ["L"]},
+        {"id": "t-R", "old": "R", "targets": ["R"]}
+      ],
+      "lanes": [
+        {"from": [0, 0], "to": [0, 1], "capacity": 1, "cost": 1},
+        {"from": [0, 1], "to": [0, 2], "capacity": 2, "cost": 1}
+      ]
+    },
+    {
+      "id": "insufficient_markers",
+      "tickets": [
+        {"id": "t-M", "old": "M", "targets": ["M"]}
+      ]
+    }
+  ]
+}
