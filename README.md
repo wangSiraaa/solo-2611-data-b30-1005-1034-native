@@ -11,9 +11,13 @@
 | `solo/revision.py` | 修订库 `RevisionLibrary`、`replace` / `preserve` 补丁、版本与批次记录、边界模式调整、字节保真校验 |
 | `solo/sample.py` | 确定性合成原件生成器（ESC/PAIR 故意跨 128 KiB 块，含模式切换、空替换、连续补丁与非法尾部所需素材） |
 | `solo/demo.py` | 演示：真实原件、两批修订、未修改字节核对、错误报告、较大语料，写出 `artifacts/` |
-| `solo/__main__.py` | CLI：`decode/check/encode/revise/demo` |
+| `solo/board.py` | 填字展板：板稿网格、按原版字节区间定位的覆字与隔线、跨修订格身份、逐项拒收报告、横竖词槽（长度一也算），制板不读词库 |
+| `solo/tags.py` | 实体签/谜社/借盒、馆藏新签、限量替签、单场回溯求解与两场连开规划（整盒续借、留柜上限、必挂委托、跨场挂次优化） |
+| `solo/exhibit.py` | 用真实 SOLO 原件重现格身份区别（同文重写白格、落进 PAIR 字内部的坏注记、冲突覆字）与馆方两场巡展四个案例，写 `artifacts/exhibit_report.json` |
+| `solo/__main__.py` | CLI：`decode/check/encode/revise/demo/exhibit` |
 | `tests/test_solo.py` | 独立参考状态机、差分测试、跨块、检查点、修订、规模测试 |
-| `artifacts/` | 运行 `python3 -m solo.demo` 生成的真实原件、各版本字节与 `manifest.json` |
+| `tests/test_board.py` | 格身份、半 PAIR/冲突/非白格拒收、隔线相邻性、词槽几何、签号表限额、单场与两场规划（含题面全部案例） |
+| `artifacts/` | 运行 `python3 -m solo.demo` 与 `python3 -m solo.exhibit` 生成的真实原件、各版本字节、`manifest.json` 与 `exhibit_report.json` |
 
 ## SOLO 编码（题面定义）
 
@@ -67,11 +71,55 @@ SHA-256**；`Checkpoint.resume(body)` / `Decoder.from_checkpoint()` 只在给定
 前后模式和切换字节；`kept_runs` 与 `dropped_switch_spans` 记录原样复制和未保留的
 纯切换跨度。
 
+## 填字展板（`board.py` / `tags.py` / `exhibit.py`）
+
+### 板稿与格身份
+
+- 板稿是某修订版本解码出的矩形文本（≤4 行 4 列），行以 `\n` 分隔：`#` 黑格、
+  `.` 白格、其余为印字格；每个格身份带原版正文中的完整字符字节区间。
+- 跨修订只经补丁记录继承身份：整段复制保留的字符身份延续；凡被 `replace`
+  触碰的格身份即失效——**即使替换的是同一个字、新老字节完全相同**（决策依据是
+  补丁记录而非字节比对）。
+- 覆字按所指原版字节区间定位，且原版那格必须是白格；逐项拒收并报告：
+  `bad_range`（对不上完整字符/落在纯切换字节）、`half_pair`（落进双字节 PAIR
+  字内部的半个格）、`partial_character`、`not_white`、`identity_rewritten`
+  （同文重写也失效）、`conflict`（同格异值，全部不装板）。
+- 隔线钉在同一行相邻两格之间；两侧身份都存活、且在新板中仍按原顺序相邻才装板，
+  否则报 `side_rewritten` / `not_adjacent`。隔线只阻断左右连词，不影响竖槽。
+- `make_board()` 按实际印字与有效覆字推出横竖词槽（黑格与隔线切分，长度一也
+  成槽，≤10 槽），全程不读任何谜社词库。
+
+### 签、盒、替签与两场规划
+
+- 实体 `Tag` 带解词、谜社与旧签标记；旧签必须属于某个 `Box`，按整盒交接。
+  每槽可挂签 ≤4，一场内同一解词最多一次、每签最多占一槽、每槽实挂一张，
+  交叉格必须同字，印字/覆字固定字母必须遵守。
+- `ReplacementTag` 另列签号、可替槽与解词，领用即从全单共享库存扣一，不计谜社
+  旧签；替签种类 ≤3、借盒 ≤4。
+- `feasible_assignments()` 用回溯枚举单场可行挂法；`plan_two_showings()` 处理
+  连开两场：首场前各盒到馆，闭馆只续借实际挂出过签的盒（也可退），退回盒次场
+  不可借，续借盒内先前没挂的签与已挂过的实体签均可在次场使用（同一旧签两场
+  各算一次）。优化次序：最大化目标谜社旧签挂次 → 再保下限谜社 → 少领替签 →
+  少占留柜；无解返回 `InfeasibleReport` 指出不能同时兑现的限制。
+
+### 重现案例（`python3 -m solo.exhibit`）
+
+真实 SOLO 原件 `ff01 0000 ff00 2e 0a 2e 44`（板稿“一. / .D”）上：
+
+1. 把白格 `.` 同文重写为 `.`：两版该格字节相同，但旧格身份经补丁记录判定失效，
+   钉旧身份的 B 覆字拒收，钉新版本身份的 B 覆字正常装板；
+2. `[2,3)` 只取 PAIR 字“一”两个字节中的第一个 → `half_pair` 拒收；
+3. 印字 D 格上的覆字 → `not_white`；同格 B/C 两件 → `conflict`；
+4. 两场巡展四案例与题面一致：无 R 时首挂 Q1、续乙盒、次挂 Q2（甲 0 乙 2）；
+   首场也装 B 覆字则 Q1 不能挂、次场无签；发 R 且必挂 P1 时退乙盒、次场领 R
+   （甲 1 乙 0）；无委托时两种借挂方式都成展，由优化目标选择。
+
 ## 运行
 
 ```bash
 python3 -m unittest discover -s tests -v      # 全部测试
 python3 -m solo.demo                          # 演示并写 artifacts/
+python3 -m solo.exhibit                       # 展板格身份与两场巡展重现
 python3 -m solo check artifacts/original.bin
 python3 -m solo decode --checkpoint 10 artifacts/version_1.bin
 python3 -m solo revise artifacts/original.bin patches.json > new.bin

@@ -4,6 +4,7 @@
     python3 -m solo encode TEXT
     python3 -m solo revise ORIGINAL PATCHES.json
     python3 -m solo demo
+    python3 -m solo exhibit
     python3 -m solo check FILE
 
 ``revise`` reads a JSON batch:
@@ -103,6 +104,13 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_exhibit(args: argparse.Namespace) -> int:
+    from .exhibit import exhibit
+
+    exhibit()
+    return 0
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     body = _load(args.file)
     try:
@@ -138,6 +146,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("demo", help="write a demo and artifacts")
     p.set_defaults(func=cmd_demo)
+
+    p = sub.add_parser(
+        "exhibit",
+        help="run the crossword-board identity and two-show exhibit",
+    )
+    p.set_defaults(func=cmd_exhibit)
 
     p = sub.add_parser("check", help="validate a body")
     p.add_argument("file")

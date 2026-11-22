@@ -1,0 +1,440 @@
+{
+  "identity": {
+    "original": {
+      "body": "ff010000ff002e0a2e44",
+      "sha256": "13453bf8023009d2cef866fec19c5c355549ac791c2279885cb7356a0ae70135",
+      "cells": {
+        "0": {
+          "char": "一",
+          "bytes": [
+            2,
+            4
+          ],
+          "mode": 1
+        },
+        "1": {
+          "char": ".",
+          "bytes": [
+            6,
+            7
+          ],
+          "mode": 0
+        },
+        "2": {
+          "char": "\n",
+          "bytes": [
+            7,
+            8
+          ],
+          "mode": 0
+        },
+        "3": {
+          "char": ".",
+          "bytes": [
+            8,
+            9
+          ],
+          "mode": 0
+        },
+        "4": {
+          "char": "D",
+          "bytes": [
+            9,
+            10
+          ],
+          "mode": 0
+        }
+      }
+    },
+    "same_value_rewrite": {
+      "cell": [
+        0,
+        1
+      ],
+      "byte_equal_across_versions": true,
+      "old_identity_maps_to": null,
+      "mounted_overlay": {
+        "(0, 1)": "B"
+      }
+    },
+    "rejections": [
+      {
+        "code": "identity_rewritten",
+        "reason": "cell (0,1) of v0 was touched by a replacement; its identity is dead even if the rewritten character has the same value and bytes",
+        "overlay": "B"
+      },
+      {
+        "code": "half_pair",
+        "reason": "range [2,3) lands inside two-byte PAIR character '一' at cell (0,0) [2,4); a half PAIR cell cannot carry an overlay",
+        "overlay": "X"
+      },
+      {
+        "code": "not_white",
+        "reason": "cell (1,1) of the origin is letter ('D'); overlays may only cover white '.' cells",
+        "overlay": "Z"
+      },
+      {
+        "code": "conflict",
+        "reason": "competing overlays on cell (1, 0): B, C",
+        "overlay": "B件"
+      },
+      {
+        "code": "conflict",
+        "reason": "competing overlays on cell (1, 0): B, C",
+        "overlay": "C件"
+      }
+    ],
+    "pair_mode_value": 1
+  },
+  "cases": {
+    "case_a_no_replacement": {
+      "feasible": true,
+      "showings": [
+        {
+          "showing": 0,
+          "face": "一C/BD",
+          "slots": {
+            "H(0,0)": "N-H1-一C",
+            "H(1,0)": "N-H2-BD",
+            "V(0,0)": "Q1",
+            "V(0,1)": "N-V2-CD"
+          },
+          "words": {
+            "H(0,0)": "一C",
+            "H(1,0)": "BD",
+            "V(0,0)": "一B",
+            "V(0,1)": "CD"
+          },
+          "hung_old_tags": [
+            "Q1"
+          ],
+          "used_boxes": [
+            "乙盒"
+          ],
+          "replacement_draws": [],
+          "club_old_hangs": {
+            "乙社": 1
+          }
+        },
+        {
+          "showing": 1,
+          "face": "一B/CD",
+          "slots": {
+            "H(0,0)": "N-H1-一B",
+            "H(1,0)": "Q2",
+            "V(0,0)": "N-V1-一C",
+            "V(0,1)": "N-V2-BD"
+          },
+          "words": {
+            "H(0,0)": "一B",
+            "H(1,0)": "CD",
+            "V(0,0)": "一C",
+            "V(0,1)": "BD"
+          },
+          "hung_old_tags": [
+            "Q2"
+          ],
+          "used_boxes": [
+            "乙盒"
+          ],
+          "replacement_draws": [],
+          "club_old_hangs": {
+            "乙社": 1
+          }
+        }
+      ],
+      "renewed_boxes": [
+        "乙盒"
+      ],
+      "returned_boxes": [
+        "甲盒"
+      ],
+      "replacement_stock_left": {
+        "R": 0
+      },
+      "club_old_hangs": {
+        "乙社": 2
+      }
+    },
+    "first_showing_faces": [
+      "一B/CD",
+      "一C/BD"
+    ],
+    "case_b_first_overlay_no_replacement": {
+      "q1_hangable": false,
+      "feasible": false,
+      "reasons": [
+        "after a feasible first showing, the second showing has no tags left for any renewal subset of [] (stock {'R': 0})",
+        "after a feasible first showing, the second showing has no tags left for any renewal subset of ['甲盒'] (stock {'R': 0})"
+      ],
+      "blocking": {
+        "floor_club": null,
+        "floor_hangs": 0,
+        "cabinet_limit": 1
+      }
+    },
+    "case_c_mandate_p1_with_replacement": {
+      "feasible": true,
+      "showings": [
+        {
+          "showing": 0,
+          "face": "一B/CD",
+          "slots": {
+            "H(0,0)": "P1",
+            "H(1,0)": "N-H2-CD",
+            "V(0,0)": "N-V1-一C",
+            "V(0,1)": "N-V2-BD"
+          },
+          "words": {
+            "H(0,0)": "一B",
+            "H(1,0)": "CD",
+            "V(0,0)": "一C",
+            "V(0,1)": "BD"
+          },
+          "hung_old_tags": [
+            "P1"
+          ],
+          "used_boxes": [
+            "甲盒"
+          ],
+          "replacement_draws": [],
+          "club_old_hangs": {
+            "甲社": 1
+          }
+        },
+        {
+          "showing": 1,
+          "face": "一B/CD",
+          "slots": {
+            "H(0,0)": "N-H1-一B",
+            "H(1,0)": "R",
+            "V(0,0)": "N-V1-一C",
+            "V(0,1)": "N-V2-BD"
+          },
+          "words": {
+            "H(0,0)": "一B",
+            "H(1,0)": "CD",
+            "V(0,0)": "一C",
+            "V(0,1)": "BD"
+          },
+          "hung_old_tags": [],
+          "used_boxes": [],
+          "replacement_draws": [
+            "R"
+          ],
+          "club_old_hangs": {}
+        }
+      ],
+      "renewed_boxes": [],
+      "returned_boxes": [
+        "乙盒",
+        "甲盒"
+      ],
+      "replacement_stock_left": {
+        "R": 0
+      },
+      "club_old_hangs": {
+        "甲社": 1
+      }
+    },
+    "case_d_two_viable_styles": {
+      "max_club_b": {
+        "feasible": true,
+        "showings": [
+          {
+            "showing": 0,
+            "face": "一C/BD",
+            "slots": {
+              "H(0,0)": "N-H1-一C",
+              "H(1,0)": "N-H2-BD",
+              "V(0,0)": "Q1",
+              "V(0,1)": "N-V2-CD"
+            },
+            "words": {
+              "H(0,0)": "一C",
+              "H(1,0)": "BD",
+              "V(0,0)": "一B",
+              "V(0,1)": "CD"
+            },
+            "hung_old_tags": [
+              "Q1"
+            ],
+            "used_boxes": [
+              "乙盒"
+            ],
+            "replacement_draws": [],
+            "club_old_hangs": {
+              "乙社": 1
+            }
+          },
+          {
+            "showing": 1,
+            "face": "一B/CD",
+            "slots": {
+              "H(0,0)": "N-H1-一B",
+              "H(1,0)": "Q2",
+              "V(0,0)": "N-V1-一C",
+              "V(0,1)": "N-V2-BD"
+            },
+            "words": {
+              "H(0,0)": "一B",
+              "H(1,0)": "CD",
+              "V(0,0)": "一C",
+              "V(0,1)": "BD"
+            },
+            "hung_old_tags": [
+              "Q2"
+            ],
+            "used_boxes": [
+              "乙盒"
+            ],
+            "replacement_draws": [],
+            "club_old_hangs": {
+              "乙社": 1
+            }
+          }
+        ],
+        "renewed_boxes": [
+          "乙盒"
+        ],
+        "returned_boxes": [
+          "甲盒"
+        ],
+        "replacement_stock_left": {
+          "R": 1
+        },
+        "club_old_hangs": {
+          "乙社": 2
+        }
+      },
+      "max_club_a": {
+        "feasible": true,
+        "showings": [
+          {
+            "showing": 0,
+            "face": "一B/CD",
+            "slots": {
+              "H(0,0)": "P1",
+              "H(1,0)": "N-H2-CD",
+              "V(0,0)": "N-V1-一C",
+              "V(0,1)": "N-V2-BD"
+            },
+            "words": {
+              "H(0,0)": "一B",
+              "H(1,0)": "CD",
+              "V(0,0)": "一C",
+              "V(0,1)": "BD"
+            },
+            "hung_old_tags": [
+              "P1"
+            ],
+            "used_boxes": [
+              "甲盒"
+            ],
+            "replacement_draws": [],
+            "club_old_hangs": {
+              "甲社": 1
+            }
+          },
+          {
+            "showing": 1,
+            "face": "一B/CD",
+            "slots": {
+              "H(0,0)": "N-H1-一B",
+              "H(1,0)": "R",
+              "V(0,0)": "N-V1-一C",
+              "V(0,1)": "N-V2-BD"
+            },
+            "words": {
+              "H(0,0)": "一B",
+              "H(1,0)": "CD",
+              "V(0,0)": "一C",
+              "V(0,1)": "BD"
+            },
+            "hung_old_tags": [],
+            "used_boxes": [],
+            "replacement_draws": [
+              "R"
+            ],
+            "club_old_hangs": {}
+          }
+        ],
+        "renewed_boxes": [],
+        "returned_boxes": [
+          "乙盒",
+          "甲盒"
+        ],
+        "replacement_stock_left": {
+          "R": 0
+        },
+        "club_old_hangs": {
+          "甲社": 1
+        }
+      },
+      "floor_club_a_one": {
+        "feasible": true,
+        "showings": [
+          {
+            "showing": 0,
+            "face": "一B/CD",
+            "slots": {
+              "H(0,0)": "P1",
+              "H(1,0)": "N-H2-CD",
+              "V(0,0)": "N-V1-一C",
+              "V(0,1)": "N-V2-BD"
+            },
+            "words": {
+              "H(0,0)": "一B",
+              "H(1,0)": "CD",
+              "V(0,0)": "一C",
+              "V(0,1)": "BD"
+            },
+            "hung_old_tags": [
+              "P1"
+            ],
+            "used_boxes": [
+              "甲盒"
+            ],
+            "replacement_draws": [],
+            "club_old_hangs": {
+              "甲社": 1
+            }
+          },
+          {
+            "showing": 1,
+            "face": "一B/CD",
+            "slots": {
+              "H(0,0)": "N-H1-一B",
+              "H(1,0)": "R",
+              "V(0,0)": "N-V1-一C",
+              "V(0,1)": "N-V2-BD"
+            },
+            "words": {
+              "H(0,0)": "一B",
+              "H(1,0)": "CD",
+              "V(0,0)": "一C",
+              "V(0,1)": "BD"
+            },
+            "hung_old_tags": [],
+            "used_boxes": [],
+            "replacement_draws": [
+              "R"
+            ],
+            "club_old_hangs": {}
+          }
+        ],
+        "renewed_boxes": [],
+        "returned_boxes": [
+          "乙盒",
+          "甲盒"
+        ],
+        "replacement_stock_left": {
+          "R": 0
+        },
+        "club_old_hangs": {
+          "甲社": 1
+        }
+      }
+    }
+  }
+}
