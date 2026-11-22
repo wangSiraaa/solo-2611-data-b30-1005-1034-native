@@ -82,6 +82,7 @@ CREATE INDEX IF NOT EXISTS idx_tickets_waiting
 
 -- 保留（含已兑现的历史保留，永不物理删除）。
 -- 锁定当时的票据、读者、馆、副本与目录修订；之后目录更正不影响已保留副本。
+-- returned：真实取件后又走馆内归还，副本恢复可展；票据仍保持 fulfilled。
 CREATE TABLE IF NOT EXISTS reservations (
     hold_id           TEXT PRIMARY KEY,
     revision          TEXT NOT NULL,
@@ -90,11 +91,12 @@ CREATE TABLE IF NOT EXISTS reservations (
     copy_id           TEXT NOT NULL,
     branch            TEXT NOT NULL,
     status            TEXT NOT NULL
-        CHECK (status IN ('held', 'fulfilled', 'expired', 'cancelled')),
+        CHECK (status IN ('held', 'fulfilled', 'expired', 'cancelled', 'returned')),
     created_at        TEXT NOT NULL,
     fulfilled_at      TEXT,
     released_at       TEXT,
-    release_reason    TEXT
+    release_reason    TEXT,
+    returned_at       TEXT
 );
 -- 未释放（held/fulfilled）的保留对票据、副本分别唯一
 CREATE UNIQUE INDEX IF NOT EXISTS idx_resv_open_ticket
@@ -135,6 +137,95 @@ CREATE TABLE IF NOT EXISTS receipts (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_receipts_op ON receipts(op_id);
+
+-- ======================================================================
+-- 保存员：逐册受光履历
+-- ======================================================================
+
+-- 每册一份自定整数光照账：永久（不可逆）上限 P_cap、恢复项上限 R_cap、
+-- 每日暗藏恢复量，以及“明示的馆藏初始状态”（旧借阅无附加光照记录时按此接入）。
+CREATE TABLE IF NOT EXISTS light_profiles (
+    copy_id        TEXT PRIMARY KEY,
+    p_cap          INTEGER NOT NULL CHECK (p_cap >= 0),
+    r_cap          INTEGER NOT NULL CHECK (r_cap >= 0),
+    dark_recovery  INTEGER NOT NULL CHECK (dark_recovery >= 0),
+    initial_p      INTEGER NOT NULL CHECK (initial_p >= 0),
+    initial_r      INTEGER NOT NULL CHECK (initial_r >= 0),
+    anchor_day     INTEGER NOT NULL DEFAULT 0,
+    created_at     TEXT NOT NULL
+);
+
+-- 逐册按日的光照读数。来源只有两类：
+--   source='loan:hold_id'  真实取件到归还期间签认的日光记录
+--   source='expo:expo_id'  正式选定展期后登记的实际受光
+-- 同册每日至多一份已签认合计曝光（部分唯一索引保证）；
+-- 未签读数保留待核（pending），不进账、不占当日名额。
+CREATE TABLE IF NOT EXISTS light_readings (
+    reading_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    copy_id         TEXT NOT NULL,
+    day             INTEGER NOT NULL,
+    exposure        INTEGER NOT NULL CHECK (exposure > 0),
+    source          TEXT NOT NULL,
+    state           TEXT NOT NULL CHECK (state IN ('signed', 'pending', 'superseded')),
+    op_id           TEXT,
+    supersedes_id   INTEGER,
+    created_at      TEXT NOT NULL,
+    FOREIGN KEY (copy_id) REFERENCES light_profiles(copy_id),
+    FOREIGN KEY (supersedes_id) REFERENCES light_readings(reading_id)
+);
+-- 同册每日只有一份“已签认合计曝光”（只约束 signed；pending 待核不占名额，
+-- 勘误先把旧版置为 superseded）。同册每日可挂多份待核读数等待核验。
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reading_once_per_day
+    ON light_readings(copy_id, day) WHERE state = 'signed';
+CREATE INDEX IF NOT EXISTS idx_reading_copy_day
+    ON light_readings(copy_id, day);
+
+-- ======================================================================
+-- 策展人：轮展班表
+-- ======================================================================
+
+-- 一场轮展：规范作品、费用参数、天数、开展日历日与逐日最低亮度
+CREATE TABLE IF NOT EXISTS exhibitions (
+    expo_id        TEXT PRIMARY KEY,
+    revision       TEXT NOT NULL,
+    canonical_bib  TEXT NOT NULL,
+    days           INTEGER NOT NULL,
+    start_day      INTEGER NOT NULL,
+    min_levels     TEXT NOT NULL,          -- JSON: 每日可读最低亮度
+    swap_fee       INTEGER NOT NULL,
+    shade_fee      INTEGER NOT NULL,
+    status         TEXT NOT NULL CHECK (status IN ('planned', 'registered')),
+    total_cost     INTEGER,
+    created_at     TEXT NOT NULL
+);
+
+-- 班表条目：每日展本、照度（1=遮光片，2=正常）、该日费用与日终双账。
+-- day 为展期内序号（0 起），calendar_day 为全局整数日历日
+CREATE TABLE IF NOT EXISTS exhibition_entries (
+    expo_id        TEXT NOT NULL,
+    day            INTEGER NOT NULL,
+    calendar_day   INTEGER NOT NULL,
+    copy_id        TEXT NOT NULL,
+    light          INTEGER NOT NULL CHECK (light IN (1, 2)),
+    shaded         INTEGER NOT NULL CHECK (shaded IN (0, 1)),
+    day_cost       INTEGER NOT NULL,
+    end_p          INTEGER NOT NULL,
+    end_r          INTEGER NOT NULL,
+    PRIMARY KEY (expo_id, day),
+    FOREIGN KEY (expo_id) REFERENCES exhibitions(expo_id)
+);
+
+-- 正式选定后登记的逐册占期（哪个展期、哪个日历日、实际受光）；
+-- 占用是真实事实，重复签发不会再多耗一份光额度。
+CREATE TABLE IF NOT EXISTS exhibition_occupancy (
+    expo_id       TEXT NOT NULL,
+    day           INTEGER NOT NULL,
+    calendar_day  INTEGER NOT NULL,
+    copy_id       TEXT NOT NULL,
+    light         INTEGER NOT NULL,
+    PRIMARY KEY (expo_id, day, copy_id),
+    FOREIGN KEY (expo_id) REFERENCES exhibitions(expo_id)
+);
 """
 
 
@@ -162,6 +253,9 @@ def connect(db_path: str) -> sqlite3.Connection:
     )
     conn.execute(
         "INSERT OR IGNORE INTO meta(key, value) VALUES('hold_counter', '0')"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO meta(key, value) VALUES('expo_counter', '0')"
     )
     conn.commit()
     return conn

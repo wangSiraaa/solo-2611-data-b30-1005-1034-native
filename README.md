@@ -8,6 +8,7 @@ Python 3.11 + 标准库 SQLite，无第三方依赖。全部数据合成，材�
 ```bash
 python3.11 demo.py                      # 端到端演示，内置断言，退出码 0 即全部兑现
 python3.11 -m unittest tests -v         # 32 个测试（含 500 副本/1000 票据规模用例）
+python3.11 -m unittest tests_light -v   # 36 个光照/轮展测试（6 册/10 日上限）
 ```
 
 ## 两个独立子系统
@@ -51,10 +52,50 @@ python3.11 -m unittest tests -v         # 32 个测试（含 500 副本/1000 票
 ## 代码地图
 
 ```
-library/db.py       SQLite schema、显式事务、操作指纹、回执与版本计数器
-library/catalog.py  修订快照、边校验/环检测、多跳规范解析、拆别名、目录查询
-library/ledger.py   票据、prepare/commit、reserve、pickup、release、公开查询
-library/system.py   门面与重开（LibrarySystem.reopen）
-demo.py             材料严格重放 + 拆别名/环拒绝/过期重选/幂等/重开场景
-tests.py            unittest 测试与规模验证
+library/db.py            SQLite schema、显式事务、操作指纹、回执与版本计数器
+library/catalog.py       修订快照、边校验/环检测、多跳规范解析、拆别名、目录查询
+library/ledger.py        票据、prepare/commit、reserve、pickup、release、公开查询
+library/conservation.py  保存员：光照建档、馆内归还、日光附件、待核/勘误、状态重放
+library/curator.py       策展人：Dijkstra 最低费用班表、并列最优枚举、正式登记
+library/system.py        门面与重开（LibrarySystem.reopen）
+demo.py                  材料严格重放 + 拆别名/环拒绝/过期重选/幂等/重开/光照轮展
+tests.py                 目录与台账的 unittest 测试与规模验证
+tests_light.py           保存员与策展人的 unittest 测试（含题面三个数值样例）
 ```
+
+## 两个新增子系统
+
+### 保存员（`library/conservation.py`）
+
+- 每册一份整数光照账：永久（不可逆）上限 `P_cap`、恢复项上限 `R_cap`、每日
+  暗藏恢复量，以及明示的馆藏初始状态（旧借阅无附加光照记录时按此接入）。
+- 按日规则：有光照 `d>0` 时 P、R 各加 d；全天暗处 P 不动、R 减暗藏恢复量到
+  最低 0；每日日终 P、R 分别不得超各自上限（超限签认读数拒绝）。
+- 光照只从**真实领用**进入：日光附件必须挂在 `fulfilled/returned` 的借阅上；
+  错误读者的拒绝回执、未取保留、同册同日重复附件都不记账。闭展前可走一次
+  馆内归还 `return_loan`，把确已取走的那笔归还、副本恢复可展。
+- 同册每日只有一份**已签认**合计曝光（部分唯一索引）；未签读数 `pending`
+  保留待核、不占名额不进状态；勘误另开新行并把原版置 `superseded`，原版不删。
+- 可独查某日 P/R（`day_value`）、每笔光来自哪册哪次真实领用（`light_provenance`）；
+  作品别名合并不合并任何实物受光历史。
+
+### 策展人（`library/curator.py`）
+
+- 输入规范作品、天数、每日最低亮度、换本费与遮光费；正常照度 2，遮光片降到 1
+  （须仍达当日最低），每个遮光使用日收费，更换实际展册另收换本费；首本进场免费。
+- 每场每日只展一本，其他可用本留暗处按该册恢复量恢复。有有效保留（held）或
+  实际未还借阅（fulfilled）的副本不得入展；余度按册独立核算，不跨册相加。
+- 规划以每册**开展前一日的真实双账**为起点（`start_day` 默认接在已签读数日
+  之后），在“日-状态”图上跑 Dijkstra 求最低总费用，并经父边森林枚举全部并列
+  最优班表；6 册/10 日上限下亚秒级完成。
+- 正式选定后登记场次、逐日班表、逐册占期与实际受光（落真实日历日、来源标注
+  本场展出）；同 op_id 同文重放不重复耗光，已被旧入口占走的册签不成可展。
+
+## 题面数值样例（`tests_light.WorkedExampleTest` / `MandatorySwapExampleTest`）
+
+| 设定 | 最低费用班表 |
+| --- | --- |
+| A 真实取件照3归还（P 额尽），B 冷藏；两天最低均1，换本2、遮光3 | 只用 B，一天照1一天照2，费 **3** |
+| 全新 A/B，仅把换本费提到 5 | 固定同册两天、其中一天照1，费 **3** |
+| 全新 A/B，换本费 2 | 每天亮2换一次本，费 **2**（A→B、B→A 两版并列） |
+| A 长期受光 P 快用尽、R 已恢复，两天最低均2 | B、A 各展一天全亮，**必须换册**；换本费2→费2，换本费5→费5 |

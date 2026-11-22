@@ -7,6 +7,8 @@ from typing import Any
 
 from . import db
 from .catalog import CatalogService
+from .conservation import ConservationService
+from .curator import CuratorService
 from .ledger import LedgerService
 
 
@@ -16,6 +18,14 @@ class LibrarySystem:
         self.conn = db.connect(db_path)
         self.catalog = CatalogService(self.conn)
         self.ledger = LedgerService(self.conn, self.catalog)
+        # 保存员在台账真实副本/保留/取件之上建逐册光照履历；
+        # 策展人读目录、台账占用与保存员双账排可兑现班表
+        self.conservation = ConservationService(
+            self.conn, self.catalog, self.ledger
+        )
+        self.curator = CuratorService(
+            self.conn, self.catalog, self.conservation
+        )
 
     @classmethod
     def reopen(cls, db_path: str) -> "LibrarySystem":
