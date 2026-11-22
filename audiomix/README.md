@@ -9,6 +9,11 @@
    固定 16kHz 输出，按固定样本块存档，内容寻址复用，支持范围读取与逐块追溯；
    不读取编辑器私有操作日志，也接受外部合法时间轴产品。
 
+在此之上还有 **声控接点检测与展台灯箱排班**（`audiomix/lightshow.py`）：
+只消费数据仓的真实混音 PCM，逐样本按阈值状态机产生脉冲，再在“必亮拍表 +
+自动门 + 值班员手按”约束下求最少手按的走台单。不操作任何外部设备，也不把
+目标亮点照抄成结果。
+
 ## 目录
 
 ```
@@ -18,9 +23,10 @@ audiomix/
   timeline.py    时间轴编辑器（整笔校验、点查询、不可变发布产品）
   engine.py      混音引擎：逐样本参考解释器 + 等价的 NumPy 分块向量化渲染
   archive.py     混音数据仓：内容寻址块存储 + SQLite 依赖索引 + 增量渲染 + 读取/追溯
+  lightshow.py   声控接点检测（跨块不重置）+ 自动门/手按最少手按派工
   cli.py         命令行入口
-tests/           手算案例、数据仓案例、边界语义测试
-demo/            30 素材/100 clip/120s 规模案例与 CLI 端到端走查
+tests/           手算案例、数据仓案例、边界语义、声控走台测试
+demo/            30 素材/100 clip/120s 规模案例、声控走台样例、CLI 端到端走查
 run_all_checks.sh 一键全量验证
 ```
 
@@ -82,9 +88,36 @@ python3 -m audiomix.cli read  --archive-root DIR/archive --render-id r1 --start 
 python3 -m audiomix.cli trace --archive-root DIR/archive --render-id r1 --start 0 --end 3200
 python3 -m audiomix.cli export-wav --archive-root DIR/archive --render-id r1 --out out.wav
 python3 -m audiomix.cli verify-integrity --archive-root DIR/archive
+
+# 声控走台（接点检测 -> 走台单；仅消费真实渲染 PCM）
+python3 -m audiomix.cli lights-pulses --archive-root DIR/archive \
+    --contacts "pickup:r1:2:0:1:1"            # id:render:H:L:n_on:n_off
+python3 -m audiomix.cli lights-plan --archive-root DIR/archive \
+    --contacts "pickup:r1:2:0:1:1" \
+    --required "L1@1,L1@5" --roster "1=alice;5=alice" --gates 1 --beats-total 7
+python3 -m audiomix.cli lights-lock-query --archive-root DIR/archive \
+    --render-id r1 --beat 1850 --H 50 --L 10 --n-on 1800 --n-off 1
 ```
 
-完整端到端示例：`bash demo/cli_walkthrough.sh`；全量验证：`bash run_all_checks.sh`。
+## 声控接点与展台排班语义（`lightshow.py`）
+
+- **接点状态机**：整数启动阈 H、复位阈 L（`0 <= L < H`）、连续启动样本数 `n_on`、
+  连续复位样本数 `n_off`。初态可启动；未锁时连续 `|x| >= H` 达 `n_on` 即在最后一拍
+  发一个脉冲并上锁；上锁后连续 `|x| <= L` 达 `n_off` 才复位。中间值 `L < |x| < H`
+  既不计启动也不计复位，并打断未完成的连续段。逐块 `feed` 不重置任何状态。
+- **脉冲来源与锁定原因**：每个 `Pulse` 记录 `contact_id / render_id / beat /
+  run_start / run_end / value`；每个 `LockEvent` 记录触发原因与 `unbeat`（复位拍）。
+  `lock_explanation(n)` 可查“第 n 拍为何仍被锁住”。
+- **自动门**：把一只接点接到一盏灯，在连续闭区间内照传该接点全部脉冲。一条接线
+  合法的充要条件是：**窗口内每个脉冲都恰是该灯当拍的必亮点**，否则会在禁亮拍误亮。
+  同灯同拍只许真正点亮一次（同灯两门不得在重叠拍上重复点灯）。
+- **排班目标**：给定自动门数量，求 (未覆盖数, 手按次数, 用门数) 字典序最小的走台单；
+  同分少用门。自动门整场最多各用一次。余下必亮点由当拍有空的值班员手按，一人一拍
+  至多一盏。无人能补的必亮点逐条列入 `uncovered`，绝不漏报。规模上限：4 灯、3 接点、
+  12 必亮点。
+
+完整端到端示例：`bash demo/cli_walkthrough.sh`，声控样例：`bash demo/light_demo.sh`；
+全量验证：`bash run_all_checks.sh`。
 
 ## 验证策略（不使用任何外部混音结果）
 
@@ -96,8 +129,14 @@ python3 -m audiomix.cli verify-integrity --archive-root DIR/archive
   零误用、外部产品篡改拒绝、编辑器日志移走后旧 render 仍可读。
 - `tests/test_edge.py`：非整数 T、左闭右开边界、非法修改回滚、持久化重开、
   “先求和后单次舍入”与“逐片段先舍入”的语义区分。
+- `tests/test_lightshow.py`：连续触发/复位计数、中间值打断、绝对值阈值、锁定原因
+  查询、跨块不重置；自动门合法窗、禁亮拍绝不误亮、同灯同拍只点一次、两灯同拍争
+  一人、无门无人时显式列未覆盖。
 - `demo/scale_demo.py`：30 素材（每采样率 10 个）、100 clip、120 秒/192 万样本，
   含全部要求情形；窗口化逐样本交叉核对，输出 WAV、块峰值、削顶数与来源索引。
+- `demo/light_demo.py`：短 WAV 真实渲染 -> 数据仓实际 PCM -> 逐样本检测 -> 走台单。
+  覆盖题面五例（基础一门一手按、加 -3 相消后长门零手按、固定原档两门零手按、
+  两灯同拍争一人、持续高音跨块边界）。
 
 参考解释器（`engine.render_reference`）是独立的纯 Python 逐样本 Fraction 实现，
 与向量化渲染路径代码完全分开，仅共享产品装载/校验，作为语义基准。

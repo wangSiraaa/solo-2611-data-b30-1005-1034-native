@@ -232,6 +232,102 @@ def cmd_render_compare(p):
             "identical": bool(mismatch == 0)})
 
 
+# ----------------------------- 声控走台 ----------------------------- #
+
+def _parse_int_list(s: str) -> list[int]:
+    return [int(x) for x in s.split(",") if x.strip() != ""]
+
+
+def _load_lightshow_args(p):
+    """解析 required/roster/windows/contacts 的通用参数。"""
+    from .lightshow import ContactSpec, detect_from_archive
+    store = ArchiveStore(p.archive_root)
+
+    # 接点：--contacts "id:render:H:L:n_on:n_off" （可多次）
+    contacts = []
+    pulses_by_contact: dict[str, list[int]] = {}
+    contact_results = []
+    for spec_str in (p.contacts or []):
+        parts = spec_str.split(":")
+        if len(parts) != 6:
+            raise SystemExit("--contacts 需为 id:render:H:L:n_on:n_off")
+        cid, rid, H, L, n_on, n_off = parts
+        det = detect_from_archive(store, rid, int(H), int(L), int(n_on), int(n_off),
+                                  contact_id=cid)
+        contacts.append(cid)
+        pulses_by_contact[cid] = det.pulse_beats()
+        contact_results.append(det.result())
+
+    # 必亮拍：--required "L1@1,L1@5" （可多次，聚合）
+    required = []
+    for chunk in (p.required or []):
+        for item in chunk.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            light_id, beat = item.split("@")
+            required.append((light_id, int(beat)))
+
+    # 值班员：--roster "1=alice;5=alice,bob" （分号分隔各拍）
+    roster: dict[int, list[str]] = {}
+    for chunk in (p.roster or []):
+        for item in chunk.split(";"):
+            item = item.strip()
+            if not item:
+                continue
+            beat_s, names = item.split("=", 1)
+            roster[int(beat_s)] = [n.strip() for n in names.split(",") if n.strip()]
+
+    return store, contacts, pulses_by_contact, contact_results, required, roster
+
+
+def _validate_show_limits(contacts, required):
+    lights = {l for l, _ in required}
+    if len(lights) > 4:
+        raise SystemExit(f"最多 4 盏灯，收到 {len(lights)}")
+    if len(contacts) > 3:
+        raise SystemExit(f"最多 3 个接点，收到 {len(contacts)}")
+    if len(set(required)) > 12:
+        raise SystemExit(f"最多 12 个必亮点，收到 {len(set(required))}")
+
+
+def cmd_lights_pulses(p):
+    store, contacts, pulses, results, required, roster = _load_lightshow_args(p)
+    _print({"contacts": results})
+    store.close()
+
+
+def cmd_lights_plan(p):
+    from .lightshow import check_plan, plan_show
+    store, contacts, pulses, results, required, roster = _load_lightshow_args(p)
+    _validate_show_limits(contacts, required)
+    plan = plan_show(required=required, pulses_by_contact=pulses,
+                     gates_available=p.gates, contacts=contacts,
+                     roster=roster, beats_total=p.beats_total)
+    out = plan.to_json()
+    out["contacts"] = results
+    out["check"] = check_plan(plan, roster)
+    _print(out)
+    store.close()
+
+
+def cmd_lights_query_lock(p):
+    """查询某渲染第 n 拍为何仍被某接点锁住（可指定接点参数）。"""
+    from .lightshow import detect_from_archive
+    store = ArchiveStore(p.archive_root)
+    det = detect_from_archive(store, p.render_id, p.H, p.L, p.n_on, p.n_off,
+                              contact_id=p.contact_id)
+    exp = det.lock_explanation(p.beat)
+    _print({
+        "render_id": p.render_id, "beat": p.beat,
+        "state": det.state_at(p.beat),
+        "locked": det.locked_at(p.beat),
+        "explanation": exp,
+        "pulse_beats": det.pulse_beats(),
+    })
+    store.close()
+
+
 # ----------------------------- 参数解析 ----------------------------- #
 
 def build_parser() -> argparse.ArgumentParser:
@@ -329,6 +425,38 @@ def build_parser() -> argparse.ArgumentParser:
     q = sub.add_parser("render-compare"); q.add_argument("--product", required=True)
     q.add_argument("--registry-root", required=True); q.add_argument("--T", required=True)
     q.set_defaults(fn=cmd_render_compare)
+
+    # ---- 声控走台 ----
+    q = sub.add_parser("lights-pulses",
+                       help="按真实 assets 检测接点脉冲（逐样本、跨块不重置）")
+    q.add_argument("--archive-root", required=True)
+    q.add_argument("--contacts", action="append",
+                   help="id:render:H:L:n_on:n_off，可多次")
+    q.add_argument("--required", action="append", help="L1@1,L1@5（可选，仅回显）")
+    q.add_argument("--roster", action="append", help="1=alice;5=bob（可选，仅回显）")
+    q.set_defaults(fn=cmd_lights_pulses)
+
+    q = sub.add_parser("lights-plan",
+                       help="按真实脉冲求最少手按的自动门/手按走台单")
+    q.add_argument("--archive-root", required=True)
+    q.add_argument("--contacts", action="append", required=True)
+    q.add_argument("--required", action="append", required=True)
+    q.add_argument("--roster", action="append")
+    q.add_argument("--gates", type=int, required=True)
+    q.add_argument("--beats-total", type=int, default=None)
+    q.set_defaults(fn=cmd_lights_plan)
+
+    q = sub.add_parser("lights-lock-query",
+                       help="查询某渲染第 n 拍为何仍被接点锁住")
+    q.add_argument("--archive-root", required=True)
+    q.add_argument("--render-id", required=True)
+    q.add_argument("--beat", type=int, required=True)
+    q.add_argument("--H", type=int, required=True)
+    q.add_argument("--L", type=int, required=True)
+    q.add_argument("--n-on", dest="n_on", type=int, default=1)
+    q.add_argument("--n-off", dest="n_off", type=int, default=1)
+    q.add_argument("--contact-id", dest="contact_id", default="c")
+    q.set_defaults(fn=cmd_lights_query_lock)
 
     return ap
 
