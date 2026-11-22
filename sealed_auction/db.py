@@ -107,6 +107,99 @@ CREATE TABLE IF NOT EXISTS settlements (
     created_at             TEXT NOT NULL,
     cleared_at             TEXT
 );
+
+-- ---------------------------------------------------------------------
+-- Fictional astronomy exhibit (see exhibit.py).  All coordinates are
+-- integers in the exhibit's own synthetic plane; a night has 15 exposures.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS exhibit_stations (
+    station          TEXT PRIMARY KEY,
+    x                INTEGER NOT NULL,
+    y                INTEGER NOT NULL,
+    move_limit       INTEGER NOT NULL CHECK (move_limit >= 0),
+    mirror_min       INTEGER,
+    mirror_max       INTEGER,
+    created_at       TEXT NOT NULL
+);
+
+-- Per-station per-exposure duty roster; exposure numbers are 1..15.
+CREATE TABLE IF NOT EXISTS exhibit_duty (
+    station          TEXT NOT NULL REFERENCES exhibit_stations(station),
+    exposure         INTEGER NOT NULL CHECK (exposure BETWEEN 1 AND 15),
+    available        INTEGER NOT NULL CHECK (available IN (0, 1)),
+    PRIMARY KEY (station, exposure)
+);
+
+CREATE TABLE IF NOT EXISTS exhibit_stars (
+    star             TEXT PRIMARY KEY,
+    radius           INTEGER NOT NULL CHECK (radius > 0),
+    created_at       TEXT NOT NULL
+);
+
+-- Occultation circle centre of a star at a given exposure.
+CREATE TABLE IF NOT EXISTS exhibit_star_centers (
+    star             TEXT NOT NULL REFERENCES exhibit_stars(star),
+    exposure         INTEGER NOT NULL CHECK (exposure BETWEEN 1 AND 15),
+    cx               INTEGER NOT NULL,
+    cy               INTEGER NOT NULL,
+    PRIMARY KEY (star, exposure)
+);
+
+-- Integer mirror position a station must hold to aim at a star.
+CREATE TABLE IF NOT EXISTS exhibit_star_aims (
+    star             TEXT NOT NULL REFERENCES exhibit_stars(star),
+    station          TEXT NOT NULL REFERENCES exhibit_stations(station),
+    mirror           INTEGER NOT NULL,
+    PRIMARY KEY (star, station)
+);
+
+-- Observation orders registered by bidding teams.
+CREATE TABLE IF NOT EXISTS exhibit_orders (
+    order_id         TEXT PRIMARY KEY,
+    buyer            TEXT NOT NULL,
+    star             TEXT NOT NULL REFERENCES exhibit_stars(star),
+    center_exposure  INTEGER NOT NULL CHECK (center_exposure BETWEEN 2 AND 14),
+    value            INTEGER NOT NULL CHECK (value > 0),
+    status           TEXT NOT NULL CHECK (status IN ('PENDING','SCORED')),
+    created_at       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exhibit_orders_buyer ON exhibit_orders(buyer);
+
+CREATE TABLE IF NOT EXISTS exhibit_nights (
+    night_id         TEXT PRIMARY KEY,
+    total_value      INTEGER NOT NULL,
+    openings_used    INTEGER NOT NULL,
+    created_at       TEXT NOT NULL
+);
+
+-- Signed real exposures ("原曝光").  The primary key makes a station
+-- exposure spendable at most once across all nights.
+CREATE TABLE IF NOT EXISTS exhibit_exposures (
+    station          TEXT NOT NULL REFERENCES exhibit_stations(station),
+    exposure         INTEGER NOT NULL CHECK (exposure BETWEEN 1 AND 15),
+    night_id         TEXT NOT NULL REFERENCES exhibit_nights(night_id),
+    order_id         TEXT NOT NULL REFERENCES exhibit_orders(order_id),
+    buyer            TEXT NOT NULL,
+    star             TEXT NOT NULL,
+    center_exposure  INTEGER NOT NULL,
+    mirror           INTEGER NOT NULL,
+    light            TEXT NOT NULL CHECK (light IN ('bright','dark')),
+    created_at       TEXT NOT NULL,
+    PRIMARY KEY (station, exposure)
+);
+CREATE INDEX IF NOT EXISTS idx_exhibit_exposures_night ON exhibit_exposures(night_id);
+
+-- Openings spent per buyer per scored order (one row per station used).
+CREATE TABLE IF NOT EXISTS exhibit_openings (
+    night_id         TEXT NOT NULL REFERENCES exhibit_nights(night_id),
+    buyer            TEXT NOT NULL,
+    order_id         TEXT NOT NULL REFERENCES exhibit_orders(order_id),
+    station          TEXT NOT NULL REFERENCES exhibit_stations(station),
+    openings         INTEGER NOT NULL CHECK (openings > 0),
+    created_at       TEXT NOT NULL,
+    PRIMARY KEY (night_id, order_id, station)
+);
 """
 
 
