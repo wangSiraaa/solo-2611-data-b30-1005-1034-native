@@ -1,0 +1,39 @@
+{
+  "n_slots": 3,
+  "headphone_capacity": [1, 1, 1],
+  "listeners": ["甲", "乙"],
+  "availability": {"甲": [1, 2, 3], "乙": [1, 2, 3]},
+  "cross_person_quota": null,
+  "items": [
+    {
+      "item_id": "P1_配平可换序",
+      "weight": 5,
+      "deadline": 3,
+      "pcm_a": [1, 2],
+      "pcm_b": [2, 1],
+      "gains_a": [1],
+      "gains_b": [1],
+      "forbidden_listeners": []
+    },
+    {
+      "item_id": "P2_新片配不平",
+      "weight": 5,
+      "deadline": 3,
+      "pcm_a": [1, 2],
+      "pcm_b": [2, 2],
+      "gains_a": [1],
+      "gains_b": [1],
+      "forbidden_listeners": []
+    },
+    {
+      "item_id": "P3_增益后全同",
+      "weight": 7,
+      "deadline": 3,
+      "pcm_a": [1, 2],
+      "pcm_b": [2, 4],
+      "gains_a": [2],
+      "gains_b": [1],
+      "forbidden_listeners": []
+    }
+  ]
+}
