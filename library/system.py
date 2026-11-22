@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from . import db
+from .bindery import BinderyService
 from .catalog import CatalogService
 from .ledger import LedgerService
 
@@ -16,6 +17,7 @@ class LibrarySystem:
         self.conn = db.connect(db_path)
         self.catalog = CatalogService(self.conn)
         self.ledger = LedgerService(self.conn, self.catalog)
+        self.bindery = BinderyService(self.conn, self.catalog)
 
     @classmethod
     def reopen(cls, db_path: str) -> "LibrarySystem":

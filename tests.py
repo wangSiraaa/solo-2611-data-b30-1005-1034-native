@@ -637,5 +637,341 @@ class ScaleTest(unittest.TestCase):
         system.close()
 
 
+# ---------------------------------------------------------------------------
+# 残本整配（保存部 + 装订间）
+# ---------------------------------------------------------------------------
+
+SEGS_TWO = [
+    {"seq": 1, "page_start": 1, "page_end": 4, "edge_start": "a", "edge_end": "x"},
+    {"seq": 2, "page_start": 5, "page_end": 8, "edge_start": "x", "edge_end": "z"},
+]
+
+
+def _bindery_system(merge: bool = True, compat: bool = True,
+                    fac_cost: int = 4) -> LibrarySystem:
+    """材料场景：C1 缺第二帖，C2（另一个副本）有第二帖，另有同码仿印。"""
+    s = LibrarySystem(":memory:")
+    copies = [
+        {"id": "C1", "book": "WA", "branch": "north", "format": "hardcover"},
+        {"id": "C2", "book": "WB", "branch": "south", "format": "paperback"},
+    ]
+    s.catalog.submit_revision("v1", ["WA", "WB"], [], copies, op_id="cat1")
+    s.bindery.register_impression("IMain", "pb", SEGS_TWO)
+    s.bindery.register_impression(
+        "ISup", "pb", SEGS_TWO, compatible=["IMain"] if compat else None
+    )
+    s.bindery.register_copy("C1", "WA", "north", "IMain")
+    s.bindery.register_copy("C2", "WB", "south", "ISup")
+    # C1 只有第一帖（页 1-4，a->x）；第二帖缺失
+    s.bindery.add_gathering("C1-g1", "C1", 1, 1, 4, "a", "x")
+    # C2 有可拆的第二帖（页 5-8，x->z），拆装费 1
+    s.bindery.add_gathering("C2-g2", "C2", 2, 5, 8, "x", "z", fee=1)
+    s.bindery.add_facsimile("F2", "IMain", 2, 5, 8, "x", "z",
+                            cost=fac_cost, qty=1)
+    if merge:
+        s.catalog.submit_revision(
+            "v2", ["WA", "WB"], [{"from": "WB", "to": "WA"}], copies,
+            op_id="cat2",
+        )
+        s.catalog.activate_revision("v2")
+    return s
+
+
+class BinderyScenarioTest(unittest.TestCase):
+    """题目材料的四种结果：最省 1 / 仅仿印 4 / 仿印免费 0。"""
+
+    def test_merged_cheapest_is_supply_gathering(self) -> None:
+        s = _bindery_system(merge=True, compat=True, fac_cost=4)
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["cost"], 1)
+        kinds = [p["kind"] for p in r["mains"][0]["positions"]]
+        self.assertEqual(kinds, ["stock", "supply"])
+        # 供本实际少了哪一帖？—— C2 的 g2
+        self.assertEqual(r["mains"][0]["supply"][0]["gathering"], "C2-g2")
+        self.assertEqual(r["mains"][0]["supply"][0]["from_copy"], "C2")
+        # 至少一帖原件：stock 1 + supply 1 = 2 原件
+        self.assertGreaterEqual(r["mains"][0]["originals"], 1)
+        s.close()
+
+    def test_removing_merge_means_not_same_work(self) -> None:
+        # 只用新版撤除 WB->WA：C2 不再与 C1 同作品，供本不可用，最低价落仿印 4
+        s = _bindery_system(merge=False, compat=True, fac_cost=4)
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["status"], "ok")
+        self.assertEqual(r["cost"], 4)
+        self.assertEqual([p["kind"] for p in r["mains"][0]["positions"]],
+                         ["stock", "fac"])
+        s.close()
+
+    def test_merge_without_compat_is_still_different_page_block(self) -> None:
+        # 合并了书目，但没有声明印次相容：两个不同版心不能当同一版
+        s = _bindery_system(merge=True, compat=False, fac_cost=4)
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["cost"], 4)
+        self.assertEqual([p["kind"] for p in r["mains"][0]["positions"]],
+                         ["stock", "fac"])
+        s.close()
+
+    def test_free_facsimile_beats_donor(self) -> None:
+        # 恢复合并，只把仿印费改为 0：最优改为用仿印，C2 完整保留
+        s = _bindery_system(merge=True, compat=True, fac_cost=0)
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["cost"], 0)
+        self.assertEqual([p["kind"] for p in r["mains"][0]["positions"]],
+                         ["stock", "fac"])
+        self.assertEqual(s.bindery.get_gatherings("C2")[0]["id"], "C2-g2")
+        s.close()
+
+    def test_plan_order_force_facsimile_keeps_donor(self) -> None:
+        s = _bindery_system()
+        r = s.bindery.plan_order("OF", [{"copy": "C1"}], force_facsimile=True)
+        self.assertEqual(r["cost"], 4)
+        s.bindery.confirm_order("OF")
+        # 用仿印保住供本：C2 的第二帖仍在原位
+        self.assertEqual([g["id"] for g in s.bindery.get_gatherings("C2")],
+                         ["C2-g2"])
+        s.close()
+
+
+class BinderyConstraintTest(unittest.TestCase):
+    def test_donor_locked_to_reader_cannot_be_used(self) -> None:
+        s = _bindery_system()
+        s.ledger.register_ticket(
+            "T2", "R2", "WB", 1, ["south"], ["paperback"], op_id="tk2"
+        )
+        s.ledger.reserve("h2", "v2", "C2")  # C2 已保留，不能再当供本
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["cost"], 4)
+        self.assertEqual([p["kind"] for p in r["mains"][0]["positions"]],
+                         ["stock", "fac"])
+        s.close()
+
+    def test_immovable_donor_gathering_not_taken(self) -> None:
+        s = _bindery_system()
+        s.conn.execute(
+            "UPDATE bindery_gatherings SET immovable=1 WHERE gathering_id='C2-g2'"
+        )
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["cost"], 4)
+        s.close()
+
+    def test_immovable_main_gathering_cannot_move(self) -> None:
+        s = LibrarySystem(":memory:")
+        s.catalog.submit_revision(
+            "v1", ["W"], [],
+            [{"id": "CM", "book": "W", "branch": "n", "format": "h"}],
+            op_id="c",
+        )
+        s.bindery.register_impression("IM", "pb", SEGS_TWO)
+        s.bindery.register_copy("CM", "W", "n", "IM")
+        # 题记帖物理上覆盖第二段，但序号在原位 1：不得移到位置 2
+        s.bindery.add_gathering("G-imm", "CM", 1, 5, 8, "x", "z", immovable=True)
+        r = s.bindery.plan_repair("CM")
+        self.assertEqual(r["status"], "rejected")
+        self.assertEqual(r["error"]["reason"], "uncovered_segment")
+        s.close()
+
+    def test_hold_preserved_and_pickup_respects_in_repair(self) -> None:
+        s = _bindery_system()
+        s.ledger.register_ticket(
+            "T1", "R", "WA", 1, ["north"], ["hardcover"], op_id="tk1"
+        )
+        hold = s.ledger.reserve("h1", "v2", "C1")
+        r = s.bindery.plan_order("O1", [{"copy": "C1", "min_originals": 1}])
+        # 主本已锁给读者：方案保留原 hold 的人与副本
+        self.assertEqual(r["mains"][0]["holds_preserved"]["hold_id"], hold["hold_id"])
+        self.assertEqual(r["mains"][0]["holds_preserved"]["reader_id"], "R")
+
+        s.bindery.confirm_order("O1")
+        # 正在拆装：取件入口拒绝，且保留不被消耗
+        bad = s.ledger.pickup("p1", hold["hold_id"], "R", "C1")
+        self.assertEqual(bad["status"], "rejected")
+        self.assertEqual(bad["error"]["reason"], "copy_in_repair")
+        self.assertEqual(s.ledger.get_hold(hold["hold_id"])["status"], "held")
+        # 供本实际少了一帖
+        self.assertEqual(s.bindery.get_gatherings("C2"), [])
+
+        s.bindery.complete_order("O1")
+        ok = s.ledger.pickup("p2", hold["hold_id"], "R", "C1")
+        self.assertEqual(ok["status"], "ok")
+        self.assertEqual(ok["reader"], "R")
+        s.close()
+
+    def test_new_reservation_rejected_while_in_repair(self) -> None:
+        s = _bindery_system()
+        s.bindery.plan_order("O1", [{"copy": "C1"}])
+        s.bindery.confirm_order("O1")
+        s.ledger.register_ticket(
+            "T9", "R9", "WA", 1, ["north"], ["hardcover"], op_id="tk9"
+        )
+        r = s.ledger.reserve("h9", "v2", "C1")
+        self.assertEqual(r["status"], "rejected")
+        self.assertEqual(r["error"]["reason"], "copy_in_repair")
+        s.close()
+
+    def test_discontinuous_missing_segments_returned(self) -> None:
+        # 两个缺段单看都可补，连起来边码不对 -> 退件
+        s = LibrarySystem(":memory:")
+        s.catalog.submit_revision(
+            "v1", ["WA"], [],
+            [
+                {"id": "CM", "book": "WA", "branch": "n", "format": "h"},
+                {"id": "CS", "book": "WA", "branch": "s", "format": "p"},
+            ],
+            op_id="c",
+        )
+        segs = [
+            {"seq": 1, "page_start": 1, "page_end": 4,
+             "edge_start": "a", "edge_end": "x"},
+            {"seq": 2, "page_start": 5, "page_end": 8,
+             "edge_start": "x", "edge_end": "z"},
+            {"seq": 3, "page_start": 9, "page_end": 12,
+             "edge_start": "z", "edge_end": "e"},
+        ]
+        s.bindery.register_impression("IM", "pb", segs)
+        s.bindery.register_impression("IMC", "pb", segs, compatible=["IM"])
+        s.bindery.register_copy("CM", "WA", "n", "IM")
+        s.bindery.register_copy("CS", "WA", "s", "IMC")
+        s.bindery.add_gathering("M1", "CM", 1, 1, 4, "a", "x")
+        # 段 2、段 3 各自有帖：段 2 x->m，段 3 n->e；但 m != n，接不上
+        s.bindery.add_gathering("S2", "CS", 2, 5, 8, "x", "m", fee=2)
+        s.bindery.add_gathering("S3", "CS", 3, 9, 12, "n", "e", fee=3)
+        r = s.bindery.plan_repair("CM")
+        self.assertEqual(r["status"], "rejected")
+        self.assertEqual(r["error"]["reason"], "no_continuous_assembly")
+        s.close()
+
+    def test_needs_verification_blocks_confirmation(self) -> None:
+        s = LibrarySystem(":memory:")
+        s.catalog.submit_revision(
+            "v1", ["W"], [],
+            [{"id": "CM", "book": "W", "branch": "n", "format": "h"}],
+            op_id="c",
+        )
+        s.bindery.register_impression("IU", None, SEGS_TWO)  # 无版心信息
+        s.bindery.register_copy("CM", "W", "n", "IU")
+        s.bindery.add_gathering("G1", "CM", 1, 1, 4, "a", "x")
+        s.bindery.add_gathering("G2", "CM", 2, 5, 8, "x", "z")
+        r = s.bindery.plan_repair("CM")
+        self.assertEqual(r["status"], "needs_verification")
+        ro = s.bindery.plan_order("OU", [{"copy": "CM"}])
+        self.assertEqual(ro["status"], "needs_verification")
+        self.assertEqual(s.bindery.get_order("OU")["status"], "needs_verification")
+        cc = s.bindery.confirm_order("OU")
+        self.assertEqual(cc["status"], "rejected")
+        self.assertEqual(cc["error"]["reason"], "needs_verification")
+        s.close()
+
+    def test_two_mains_cannot_share_one_physical_gathering(self) -> None:
+        # C1 缺段 2、C2 缺段 1：都能靠对方补，但同一实物帖不能同时装两册
+        s = LibrarySystem(":memory:")
+        s.catalog.submit_revision(
+            "v1", ["W"], [],
+            [
+                {"id": "CA", "book": "W", "branch": "n", "format": "h"},
+                {"id": "CB", "book": "W", "branch": "s", "format": "p"},
+            ],
+            op_id="c",
+        )
+        segs = [
+            {"seq": 1, "page_start": 1, "page_end": 4,
+             "edge_start": "a", "edge_end": "x"},
+            {"seq": 2, "page_start": 5, "page_end": 8,
+             "edge_start": "x", "edge_end": "z"},
+        ]
+        s.bindery.register_impression("I", "pb", segs)
+        s.bindery.register_copy("CA", "W", "n", "I")
+        s.bindery.register_copy("CB", "W", "s", "I")
+        s.bindery.add_gathering("A1", "CA", 1, 1, 4, "a", "x")
+        s.bindery.add_gathering("B2", "CB", 2, 5, 8, "x", "z")
+        # 无仿印：CA 需要 B2，CB 需要 A1，两者不可同时成立（一帖不可两用）
+        # 单册各自可行：CA 用 A1+B2，CB 用 B2+A1；合起来需兩份 B2/A1
+        r = s.bindery.plan_order("O", [{"copy": "CA"}, {"copy": "CB"}])
+        self.assertEqual(r["status"], "rejected")
+        s.close()
+
+    def test_old_hold_survives_dismantle_revision(self) -> None:
+        # 合并 v2 下为 C1 建立的旧 hold，在其后撤除 WB->WA 的 v3 下仍有效
+        s = _bindery_system(merge=True, compat=True, fac_cost=4)
+        s.ledger.register_ticket(
+            "T1", "R", "WA", 1, ["north"], ["hardcover"], op_id="tk1"
+        )
+        h = s.ledger.reserve("h1", "v2", "C1")
+        copies = [
+            {"id": "C1", "book": "WA", "branch": "north",
+             "format": "hardcover"},
+            {"id": "C2", "book": "WB", "branch": "south",
+             "format": "paperback"},
+        ]
+        s.catalog.submit_revision("v3", ["WA", "WB"], [], copies, op_id="v3c")
+        s.catalog.activate_revision("v3")
+        self.assertEqual(s.catalog.canonical_map("v3"),
+                         {"WA": "WA", "WB": "WB"})
+        # 旧保留仍锁定 C1 与 R，取件成功
+        self.assertEqual(s.ledger.get_hold(h["hold_id"])["status"], "held")
+        p = s.ledger.pickup("p1", h["hold_id"], "R", "C1")
+        self.assertEqual(p["status"], "ok")
+        self.assertEqual(p["reader"], "R")
+        s.close()
+
+    def test_dismantle_revision_makes_donor_ineligible(self) -> None:
+        s = _bindery_system(merge=True, compat=True, fac_cost=4)
+        copies = [
+            {"id": "C1", "book": "WA", "branch": "north",
+             "format": "hardcover"},
+            {"id": "C2", "book": "WB", "branch": "south",
+             "format": "paperback"},
+        ]
+        s.catalog.submit_revision("v3", ["WA", "WB"], [], copies, op_id="v3c")
+        s.catalog.activate_revision("v3")
+        r = s.bindery.plan_repair("C1")
+        self.assertEqual(r["cost"], 4)
+        self.assertEqual([p["kind"] for p in r["mains"][0]["positions"]],
+                         ["stock", "fac"])
+        s.close()
+
+    def test_reopen_keeps_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "bind.db")
+            s = _bindery_system_path(path)
+            s.bindery.plan_order("O1", [{"copy": "C1"}])
+            s.bindery.confirm_order("O1")
+            s.bindery.complete_order("O1")
+            s.close()
+            re = LibrarySystem.reopen(path)
+            self.assertEqual(re.bindery.get_order("O1")["status"], "completed")
+            comp = re.bindery.get_completion("O1")
+            self.assertIsNotNone(comp)
+            self.assertFalse(re.bindery.get_copy_state("C1")["in_repair"])
+            # 旧版目录仍可查，副本原始身份未被揉掉
+            self.assertEqual(
+                re.catalog.get_revision("v2")["copies"][0]["book"], "WA"
+            )
+            re.close()
+
+
+def _bindery_system_path(path: str) -> LibrarySystem:
+    """与 _bindery_system 相同，但落到磁盘库以便重开。"""
+    s = LibrarySystem(path)
+    copies = [
+        {"id": "C1", "book": "WA", "branch": "north", "format": "hardcover"},
+        {"id": "C2", "book": "WB", "branch": "south", "format": "paperback"},
+    ]
+    s.catalog.submit_revision("v1", ["WA", "WB"], [], copies, op_id="cat1")
+    s.bindery.register_impression("IMain", "pb", SEGS_TWO)
+    s.bindery.register_impression("ISup", "pb", SEGS_TWO, compatible=["IMain"])
+    s.bindery.register_copy("C1", "WA", "north", "IMain")
+    s.bindery.register_copy("C2", "WB", "south", "ISup")
+    s.bindery.add_gathering("C1-g1", "C1", 1, 1, 4, "a", "x")
+    s.bindery.add_gathering("C2-g2", "C2", 2, 5, 8, "x", "z", fee=1)
+    s.bindery.add_facsimile("F2", "IMain", 2, 5, 8, "x", "z", cost=4, qty=1)
+    s.catalog.submit_revision(
+        "v2", ["WA", "WB"], [{"from": "WB", "to": "WA"}], copies, op_id="cat2"
+    )
+    s.catalog.activate_revision("v2")
+    return s
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

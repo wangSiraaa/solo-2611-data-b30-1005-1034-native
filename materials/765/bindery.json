@@ -1,0 +1,49 @@
+{
+  "note": "残本整配合成材料：无目标实现。C1 缺第二帖（页5-8，以z收尾）；C2 有相容印次第二帖 x->z，拆装费1；另有同码仿印费4。",
+  "catalogs": [
+    {"revision": "v1", "aliases": []},
+    {"revision": "v2", "aliases": [{"from": "WB", "to": "WA"}]}
+  ],
+  "impressions": [
+    {
+      "id": "IMain",
+      "page_block": "pb-main",
+      "segments": [
+        {"seq": 1, "page_start": 1, "page_end": 4, "edge_start": "a", "edge_end": "x"},
+        {"seq": 2, "page_start": 5, "page_end": 8, "edge_start": "x", "edge_end": "z"}
+      ],
+      "compatible": []
+    },
+    {
+      "id": "ISup",
+      "page_block": "pb-sup",
+      "segments": [
+        {"seq": 1, "page_start": 1, "page_end": 4, "edge_start": "a", "edge_end": "x"},
+        {"seq": 2, "page_start": 5, "page_end": 8, "edge_start": "x", "edge_end": "z"}
+      ],
+      "compatible": ["IMain"]
+    }
+  ],
+  "copies": [
+    {"id": "C1", "book": "WA", "branch": "north", "impression": "IMain"},
+    {"id": "C2", "book": "WB", "branch": "south", "impression": "ISup"}
+  ],
+  "gatherings": [
+    {"id": "C1-g1", "copy": "C1", "seq": 1, "page_start": 1, "page_end": 4,
+     "edge_start": "a", "edge_end": "x", "immovable": false, "fee": 0},
+    {"id": "C2-g2", "copy": "C2", "seq": 2, "page_start": 5, "page_end": 8,
+     "edge_start": "x", "edge_end": "z", "immovable": false, "fee": 1}
+  ],
+  "facsimiles": [
+    {"id": "F2", "impression": "IMain", "seq": 2, "page_start": 5, "page_end": 8,
+     "edge_start": "x", "edge_end": "z", "cost": 4, "qty": 1}
+  ],
+  "scenarios": [
+    {"name": "merged_compat", "head": "v2", "expect_cost": 1,
+     "expect_kinds": ["stock", "supply"]},
+    {"name": "dismantle_only", "head": "v1", "expect_cost": 4,
+     "expect_kinds": ["stock", "fac"]},
+    {"name": "free_facsimile", "head": "v2", "facsimile_cost_override": 0,
+     "expect_cost": 0, "expect_kinds": ["stock", "fac"]}
+  ]
+}

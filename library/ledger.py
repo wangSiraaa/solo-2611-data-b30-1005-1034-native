@@ -378,6 +378,14 @@ class LedgerService:
                     expected=hold["copy_id"],
                     given=copy_id,
                 )
+            # 正在装订间拆装的实物暂不可交付；保留本身不动，完工后仍可按旧
+            # pickup 由原持票人取走
+            if self.conn.execute(
+                "SELECT 1 FROM copy_repair_state WHERE copy_id=?", (copy_id,)
+            ).fetchone():
+                raise Rejection(
+                    "copy_in_repair", hold=hold_id, copy=copy_id
+                )
             ts = db.now_iso()
             conn.execute(
                 "UPDATE reservations SET status='fulfilled', fulfilled_at=? "
@@ -664,7 +672,8 @@ class LedgerService:
         return dict(row)
 
     def _require_open_copy(self, revision: str, copy_id: str) -> dict[str, Any]:
-        """副本必须存在于指定修订、且当前无 held/fulfilled 保留（即未占用、未借出）。"""
+        """副本必须存在于指定修订、且当前无 held/fulfilled 保留（即未占用、未借出），
+        也不得正在装订间拆装（拆装中的实物不能被新保留）。"""
         if self.catalog.head_revision != revision:
             raise Rejection(
                 "not_head_revision",
@@ -679,6 +688,10 @@ class LedgerService:
         ).fetchone()
         if occupied:
             raise Rejection("copy_not_available", copy=copy_id)
+        if self.conn.execute(
+            "SELECT 1 FROM copy_repair_state WHERE copy_id=?", (copy_id,)
+        ).fetchone():
+            raise Rejection("copy_in_repair", copy=copy_id)
         return copy
 
     def _select_ticket(

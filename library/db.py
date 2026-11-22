@@ -135,6 +135,106 @@ CREATE TABLE IF NOT EXISTS receipts (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_receipts_op ON receipts(op_id);
+
+-- ===========================================================================
+-- 残本整配（保存部 + 装订间）
+--
+-- 与目录/台账的边界：
+-- - 印次（impression）与版心（page_block）是实物版本身份，独立于别名目录；
+--   书目别名合并只决定“规范作品”，不能让两个不同版心自动视为同一版。
+-- - 每一实物书帖（gathering）只登记一次，插图/题记等不可移位的帖标 immovable。
+-- - 整配单（repair_order）记录试排方案；确认后才把实帖置为 in_repair，
+--   台账的保留/取件入口据此拒绝正在拆装的实物。
+-- ===========================================================================
+
+-- 印次与版心。page_block 为空表示实物资料不足，需标“待核”。
+CREATE TABLE IF NOT EXISTS impressions (
+    impression_id TEXT PRIMARY KEY,
+    page_block    TEXT
+);
+
+-- 该印次要求的页段次序与起讫边码（全册边码必须沿此次序连续）
+CREATE TABLE IF NOT EXISTS impression_segments (
+    impression_id TEXT NOT NULL,
+    seq           INTEGER NOT NULL,
+    page_start    INTEGER NOT NULL,
+    page_end      INTEGER NOT NULL,
+    edge_start    TEXT NOT NULL,
+    edge_end      TEXT NOT NULL,
+    PRIMARY KEY (impression_id, seq),
+    FOREIGN KEY (impression_id) REFERENCES impressions(impression_id)
+);
+
+-- 获认可的相容印次（无向：查询时两个方向任一存在即可）
+CREATE TABLE IF NOT EXISTS impression_compat (
+    impression_id TEXT NOT NULL,
+    compatible_id TEXT NOT NULL,
+    PRIMARY KEY (impression_id, compatible_id)
+);
+
+-- 保存部登记的实物副本：原书目、印次、馆
+CREATE TABLE IF NOT EXISTS bindery_copies (
+    copy_id       TEXT PRIMARY KEY,
+    book          TEXT NOT NULL,
+    impression_id TEXT,
+    branch        TEXT NOT NULL
+);
+
+-- 每一实物书帖：编号、所属副本、位置、连续页段、首尾边码、可否移动、拆装费
+CREATE TABLE IF NOT EXISTS bindery_gatherings (
+    gathering_id TEXT PRIMARY KEY,
+    copy_id      TEXT NOT NULL,
+    seq          INTEGER NOT NULL,
+    page_start   INTEGER NOT NULL,
+    page_end     INTEGER NOT NULL,
+    edge_start   TEXT NOT NULL,
+    edge_end     TEXT NOT NULL,
+    immovable    INTEGER NOT NULL DEFAULT 0,  -- 带读者题记/必须原位保留
+    fee          INTEGER NOT NULL DEFAULT 0,  -- 从供本拆下并装到主本的拆装费
+    FOREIGN KEY (copy_id) REFERENCES bindery_copies(copy_id)
+);
+CREATE INDEX IF NOT EXISTS idx_bindery_gath_copy
+    ON bindery_gatherings(copy_id, seq);
+
+-- 可合法购买的仿印帖（有实际边码、费用与数量）
+CREATE TABLE IF NOT EXISTS facsimiles (
+    facsimile_id  TEXT PRIMARY KEY,
+    impression_id TEXT NOT NULL,
+    seq           INTEGER NOT NULL,
+    page_start    INTEGER NOT NULL,
+    page_end      INTEGER NOT NULL,
+    edge_start    TEXT NOT NULL,
+    edge_end      TEXT NOT NULL,
+    cost          INTEGER NOT NULL,
+    qty           INTEGER NOT NULL
+);
+
+-- 整配单：试排方案与状态。plan 为 JSON，完工清单另表永久保留。
+CREATE TABLE IF NOT EXISTS repair_orders (
+    order_id     TEXT PRIMARY KEY,
+    revision     TEXT NOT NULL,
+    status       TEXT NOT NULL
+        CHECK (status IN ('planned', 'needs_verification', 'confirmed',
+                          'completed', 'rejected')),
+    plan         TEXT,
+    created_at   TEXT NOT NULL,
+    confirmed_at TEXT,
+    completed_at TEXT
+);
+
+-- 完工清单（永久保留，重开可见）
+CREATE TABLE IF NOT EXISTS repair_completions (
+    order_id     TEXT PRIMARY KEY,
+    detail       TEXT NOT NULL,
+    completed_at TEXT NOT NULL
+);
+
+-- 正在拆装的实物副本：确认整配单后置入，完工后移除（实物交回原馆）
+CREATE TABLE IF NOT EXISTS copy_repair_state (
+    copy_id  TEXT PRIMARY KEY,
+    state    TEXT NOT NULL CHECK (state IN ('in_repair')),
+    order_id TEXT NOT NULL
+);
 """
 
 

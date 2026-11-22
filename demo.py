@@ -282,5 +282,177 @@ def main() -> None:
     banner("全部断言通过")
 
 
+# ---------------------------------------------------------------------------
+# 残本整配演示（保存部 + 装订间）
+# ---------------------------------------------------------------------------
+
+BIND_SEGS = [
+    {"seq": 1, "page_start": 1, "page_end": 4, "edge_start": "a", "edge_end": "x"},
+    {"seq": 2, "page_start": 5, "page_end": 8, "edge_start": "x", "edge_end": "z"},
+]
+
+
+def _bindery_case(*, merge: bool, compat: bool, fac_cost: int,
+                  hold: bool = False) -> LibrarySystem:
+    s = LibrarySystem(":memory:")
+    copies = [
+        {"id": "C1", "book": "WA", "branch": "north", "format": "hardcover"},
+        {"id": "C2", "book": "WB", "branch": "south", "format": "paperback"},
+    ]
+    s.catalog.submit_revision("v1", ["WA", "WB"], [], copies, op_id="b-cat1")
+    s.bindery.register_impression("IMain", "pb", BIND_SEGS)
+    s.bindery.register_impression(
+        "ISup", "pb", BIND_SEGS, compatible=["IMain"] if compat else None
+    )
+    s.bindery.register_copy("C1", "WA", "north", "IMain")
+    s.bindery.register_copy("C2", "WB", "south", "ISup")
+    # C1：第一帖 a->x 在位，第二帖缺失；C2：有可拆第二帖 x->z，拆装费 1
+    s.bindery.add_gathering("C1-g1", "C1", 1, 1, 4, "a", "x")
+    s.bindery.add_gathering("C2-g2", "C2", 2, 5, 8, "x", "z", fee=1)
+    s.bindery.add_facsimile("F2", "IMain", 2, 5, 8, "x", "z",
+                            cost=fac_cost, qty=1)
+    if merge:
+        s.catalog.submit_revision(
+            "v2", ["WA", "WB"], [{"from": "WB", "to": "WA"}], copies,
+            op_id="b-cat2",
+        )
+        s.catalog.activate_revision("v2")
+    if hold:
+        s.ledger.register_ticket(
+            "T1", "R", "WA", 1, ["north"], ["hardcover"], op_id="b-tk1"
+        )
+    return s
+
+
+def demo_bindery() -> None:
+    banner("残本整配材料：从 materials/765/bindery.json 复现三档最低费用")
+    bind = json.loads(
+        (Path(__file__).parent / "materials" / "765" / "bindery.json")
+        .read_text(encoding="utf-8")
+    )
+
+    def load_bind(head: str, fac_cost: int | None = None) -> LibrarySystem:
+        s = LibrarySystem(":memory:")
+        copies = [
+            {"id": c["id"], "book": c["book"], "branch": c["branch"],
+             "format": "hardcover"}
+            for c in bind["copies"]
+        ]
+        for rev in bind["catalogs"]:
+            s.catalog.submit_revision(
+                rev["revision"], ["WA", "WB"], rev["aliases"], copies,
+                op_id=f"bm-cat-{rev['revision']}",
+            )
+        s.catalog.activate_revision(head)
+        for imp in bind["impressions"]:
+            s.bindery.register_impression(
+                imp["id"], imp["page_block"], imp["segments"],
+                compatible=imp.get("compatible"),
+            )
+        for c in bind["copies"]:
+            s.bindery.register_copy(
+                c["id"], c["book"], c["branch"], c["impression"]
+            )
+        for g in bind["gatherings"]:
+            s.bindery.add_gathering(
+                g["id"], g["copy"], g["seq"], g["page_start"], g["page_end"],
+                g["edge_start"], g["edge_end"], g["immovable"], g["fee"],
+            )
+        for f in bind["facsimiles"]:
+            s.bindery.add_facsimile(
+                f["id"], f["impression"], f["seq"], f["page_start"],
+                f["page_end"], f["edge_start"], f["edge_end"],
+                fac_cost if fac_cost is not None else f["cost"], f["qty"],
+            )
+        return s
+
+    for sc in bind["scenarios"]:
+        s = load_bind(sc["head"], sc.get("facsimile_cost_override"))
+        r = s.bindery.plan_repair("C1")
+        kinds = [p["kind"] for p in r["mains"][0]["positions"]]
+        print(f"{sc['name']:<18} cost={r['cost']} kinds={kinds}")
+        assert r["status"] == "ok" and r["cost"] == sc["expect_cost"]
+        assert kinds == sc["expect_kinds"]
+        s.close()
+
+    banner("残本整配 1：合并书目 + 相容印次，最省方案 = 从 C2 拆一帖（费用 1）")
+    s = _bindery_case(merge=True, compat=True, fac_cost=4)
+    r = s.bindery.plan_repair("C1")
+    print(json.dumps(r["mains"][0], ensure_ascii=False, indent=2))
+    assert r["cost"] == 1
+    assert [p["kind"] for p in r["mains"][0]["positions"]] == ["stock", "supply"]
+    assert r["mains"][0]["supply"][0]["gathering"] == "C2-g2"
+    s.close()
+
+    banner("残本整配 2：只用新版撤除 WB->WA，C2 已非同一作品，最低价 = 仿印 4")
+    s = _bindery_case(merge=False, compat=True, fac_cost=4)
+    r = s.bindery.plan_repair("C1")
+    assert r["cost"] == 4
+    assert [p["kind"] for p in r["mains"][0]["positions"]] == ["stock", "fac"]
+    print("cost =", r["cost"], "（用仿印）")
+    s.close()
+
+    banner("残本整配 3：恢复合并，但仿印费改 0，最优改用仿印，C2 完整保留")
+    s = _bindery_case(merge=True, compat=True, fac_cost=0)
+    r = s.bindery.plan_repair("C1")
+    assert r["cost"] == 0
+    assert [p["kind"] for p in r["mains"][0]["positions"]] == ["stock", "fac"]
+    # 确认后 C2 的书帖仍在原位（供本未被动）
+    s.bindery.plan_order("O-fac", [{"copy": "C1"}], force_facsimile=True)
+    s.bindery.confirm_order("O-fac")
+    assert [g["id"] for g in s.bindery.get_gatherings("C2")] == ["C2-g2"]
+    print("cost = 0，C2 完整：", [g["id"] for g in s.bindery.get_gatherings("C2")])
+    s.close()
+
+    banner("残本整配 4：旧 hold 保留，拆装中取件被拒，完工后原持票人按旧 pickup 取走")
+    s = _bindery_case(merge=True, compat=True, fac_cost=4, hold=True)
+    hold = s.ledger.reserve("b-h", "v2", "C1")
+    plan = s.bindery.plan_order("O1", [{"copy": "C1", "min_originals": 1}])
+    assert plan["mains"][0]["holds_preserved"]["hold_id"] == hold["hold_id"]
+    s.bindery.confirm_order("O1")
+    # 供本实际少了哪一帖
+    print("C2 拆后剩帖：", s.bindery.get_gatherings("C2"))
+    during = s.ledger.pickup("b-p1", hold["hold_id"], "R", "C1")
+    assert during["status"] == "rejected"
+    assert during["error"]["reason"] == "copy_in_repair"
+    assert s.ledger.get_hold(hold["hold_id"])["status"] == "held"
+    s.bindery.complete_order("O1")
+    after = s.ledger.pickup("b-p2", hold["hold_id"], "R", "C1")
+    assert after["status"] == "ok" and after["reader"] == "R"
+    print("拆装中取件：", during["error"]["reason"], "；完工后取件：", after["status"])
+    s.close()
+
+    banner("残本整配 5：两个缺段单看都可补、连起来边码不对 -> 退件")
+    s = LibrarySystem(":memory:")
+    s.catalog.submit_revision(
+        "v1", ["WA"], [],
+        [
+            {"id": "CM", "book": "WA", "branch": "n", "format": "h"},
+            {"id": "CS", "book": "WA", "branch": "s", "format": "p"},
+        ],
+        op_id="rc1",
+    )
+    segs = [
+        {"seq": 1, "page_start": 1, "page_end": 4, "edge_start": "a", "edge_end": "x"},
+        {"seq": 2, "page_start": 5, "page_end": 8, "edge_start": "x", "edge_end": "z"},
+        {"seq": 3, "page_start": 9, "page_end": 12, "edge_start": "z", "edge_end": "e"},
+    ]
+    s.bindery.register_impression("IM", "pb", segs)
+    s.bindery.register_impression("IMC", "pb", segs, compatible=["IM"])
+    s.bindery.register_copy("CM", "WA", "n", "IM")
+    s.bindery.register_copy("CS", "WA", "s", "IMC")
+    s.bindery.add_gathering("M1", "CM", 1, 1, 4, "a", "x")
+    s.bindery.add_gathering("S2", "CS", 2, 5, 8, "x", "m", fee=2)
+    s.bindery.add_gathering("S3", "CS", 3, 9, 12, "n", "e", fee=3)
+    r = s.bindery.plan_repair("CM")
+    print(json.dumps(r["error"], ensure_ascii=False, indent=2))
+    assert r["status"] == "rejected"
+    assert r["error"]["reason"] == "no_continuous_assembly"
+    s.close()
+
+    banner("残本整配演示全部断言通过")
+
+
 if __name__ == "__main__":
     main()
+    demo_bindery()
