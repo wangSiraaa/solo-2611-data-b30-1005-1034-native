@@ -1,13 +1,16 @@
 # 多采样率剪辑时间轴与真实混音档案（audiomix）
 
 纯 Python 3.11 实现（NumPy/SciPy/标准 `wave`），无视频、无音频设备、无网页。
-两个独立服务：
+两个独立服务，外加一个构建其上的磁带馆借展剪接台：
 
 1. **可独立编辑的音频时间轴服务**（`audiomix/timeline.py`）：插入/移动/修改/删除/
    区间查询/发布，clip 身份独立于素材，有理数时间，不渲染即可点查询。
 2. **实际混音数据仓**（`audiomix/archive.py`）：只消费不可变发布产品与实际素材字节，
    固定 16kHz 输出，按固定样本块存档，内容寻址复用，支持范围读取与逐块追溯；
    不读取编辑器私有操作日志，也接受外部合法时间轴产品。
+3. **磁带馆借展剪接台**（`audiomix/loan.py`）：具名实物盘登记（入藏号绑定原 PCM
+   摘要与样本位置，同录音另一副本另入藏号）、借展段逐拍资格核验（剪接师）、
+   批量借展优化（价值/翻录拍/落刀）、签单入账与翻录新 WAV。
 
 ## 目录
 
@@ -18,9 +21,10 @@ audiomix/
   timeline.py    时间轴编辑器（整笔校验、点查询、不可变发布产品）
   engine.py      混音引擎：逐样本参考解释器 + 等价的 NumPy 分块向量化渲染
   archive.py     混音数据仓：内容寻址块存储 + SQLite 依赖索引 + 增量渲染 + 读取/追溯
+  loan.py        磁带馆借展剪接台：实物盘登记、逐拍资格核验、批量优化、签单入账
   cli.py         命令行入口
-tests/           手算案例、数据仓案例、边界语义测试
-demo/            30 素材/100 clip/120s 规模案例与 CLI 端到端走查
+tests/           手算案例、数据仓案例、边界语义测试、借展剪接台案例
+demo/            30 素材/100 clip/120s 规模案例与 CLI 端到端走查、借展 CLI 走查
 run_all_checks.sh 一键全量验证
 ```
 
@@ -82,9 +86,43 @@ python3 -m audiomix.cli read  --archive-root DIR/archive --render-id r1 --start 
 python3 -m audiomix.cli trace --archive-root DIR/archive --render-id r1 --start 0 --end 3200
 python3 -m audiomix.cli export-wav --archive-root DIR/archive --render-id r1 --out out.wav
 python3 -m audiomix.cli verify-integrity --archive-root DIR/archive
+
+# 磁带馆借展剪接台（请求为 JSON 文件：具名 clip + 输出半开区间 + 价值 + 是否收翻录）
+python3 -m audiomix.cli reel-register --vault DIR/vault --registry-root DIR/registry \
+    --accession R1 --asset-id AID --cut-bounds 0,1,2,3,4   # 具名实物盘登记
+python3 -m audiomix.cli loan-analyze --vault DIR/vault --registry-root DIR/registry \
+    --product product.json --requests reqs.json            # 剪接师逐拍核验
+python3 -m audiomix.cli loan-plan --vault DIR/vault --registry-root DIR/registry \
+    --product product.json --requests reqs.json --quota 2  # 只排程不签单
+python3 -m audiomix.cli loan-book --vault DIR/vault --registry-root DIR/registry \
+    --archive-root DIR/archive --product product.json \
+    --requests reqs.json --quota 2 --order-id O1           # 优化+签单+翻录新 WAV
+python3 -m audiomix.cli loan-order --vault DIR/vault --order-id O1   # 原单回读
+python3 -m audiomix.cli vault-show --vault DIR/vault                 # 实物账
 ```
 
-完整端到端示例：`bash demo/cli_walkthrough.sh`；全量验证：`bash run_all_checks.sh`。
+## 借展剪接台语义（`loan.py`）
+
+- **实物盘**：馆方用实际 16kHz 单声道素材登记具名实物盘（入藏号唯一，≤4 盘），
+  绑定原 PCM 摘要与样本位置；登记时读实际字节核摘要。同一录音的另一副本
+  （字节相同、asset_id 相同）必须另有入藏号，是两件实物。
+- **借展段资格（剪接师逐拍核验）**：借展段指向已发布节目中的具名 clip 及输出
+  半开区间。原盘取样必须在整段每拍由该次引用**独自**、按原序、一步一源样本
+  （源采样率×速度 == 16000 且源位置为整数）、实际增益 1、无淡化改变地贡献，
+  同时核实际归档字节（产品摘要 == 登记摘要 == 实际字节 SHA-256）。
+  另一轨碰巧相消为零、或同一素材的别次出现，都不能顶替；零增益轨不算参与制声。
+  核验报告列出可作原件的盘、连续原样本区间、可落刀的两端，以及哪一拍只能从
+  母带翻录。
+- **库房**：每盘登记可切边界与以前借走的半开区段；交给一个展方的原段不得含
+  已割走部分（即使仓库 PCM 还能读）；已签借的原段与刀口随实物入账，
+  重开库房/原单仍能回读。
+- **批量优化**（≤16 请求）：优先总价值最大，再少翻录拍数（整批额度约束，
+  翻录必须按该段真实 render 从头到尾录满整段），再少真落刀——已有断口或
+  盘首尾不花刀，同一批相邻两段的同一新切口只算一次；同分时按固定搜索次序
+  取首先最优者。签单时翻录段从归档读真实 render 录成新 WAV 并逐样本核对。
+
+完整端到端示例：`bash demo/cli_walkthrough.sh`；借展剪接台走查：
+`bash demo/loan_walkthrough.sh`；全量验证：`bash run_all_checks.sh`。
 
 ## 验证策略（不使用任何外部混音结果）
 
@@ -96,6 +134,10 @@ python3 -m audiomix.cli verify-integrity --archive-root DIR/archive
   零误用、外部产品篡改拒绝、编辑器日志移走后旧 render 仍可读。
 - `tests/test_edge.py`：非整数 T、左闭右开边界、非法修改回滚、持久化重开、
   “先求和后单次舍入”与“逐片段先舍入”的语义区分。
+- `tests/test_loan.py`：借展剪接台 9 个案例——题面三情形（额度 2 甲真带乙翻录
+  [4,6]；改源区间重发后各拿真带只落一刀；额度 1 只交甲值 5）、已签走中段截断
+  新请求、相消/零增益/别次出现的原件资格、同录音两副本各入藏号、上限与整笔
+  拒绝、归档字节篡改核验、翻录背包、多盘综合优化。
 - `demo/scale_demo.py`：30 素材（每采样率 10 个）、100 clip、120 秒/192 万样本，
   含全部要求情形；窗口化逐样本交叉核对，输出 WAV、块峰值、削顶数与来源索引。
 

@@ -232,6 +232,78 @@ def cmd_render_compare(p):
             "identical": bool(mismatch == 0)})
 
 
+# ----------------------------- 借展剪接台命令 ----------------------------- #
+
+def _load_requests(path: str):
+    from .loan import LoanRequest
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    return [LoanRequest.from_json(o) for o in data]
+
+
+def _office(p):
+    from .archive import ArchiveStore
+    from .loan import LoanOffice, Vault
+    vault = Vault(p.vault)
+    archive = ArchiveStore(p.archive_root) if getattr(p, "archive_root", None) else None
+    return LoanOffice(vault, AssetRegistry(p.registry_root), archive)
+
+
+def cmd_reel_register(p):
+    from .loan import Vault, VaultError
+    vault = Vault(p.vault)
+    bounds = [int(v) for v in p.cut_bounds.split(",") if v.strip() != ""]
+    try:
+        reel = vault.register_reel(AssetRegistry(p.registry_root), p.accession,
+                                   p.asset_id, bounds, note=p.note)
+    except VaultError as e:
+        _print({"rejected": True, "reason": str(e)})
+        sys.exit(2)
+    _print(reel.to_json() | {"cut_bounds": vault.cut_bounds(reel.accession)})
+
+
+def cmd_vault_show(p):
+    from .loan import Vault
+    _print(Vault(p.vault).state_json())
+
+
+def cmd_loan_analyze(p):
+    from .engine import load_product
+    office = _office(p)
+    _print(office.analyze(load_product(p.product), _load_requests(p.requests)))
+
+
+def cmd_loan_plan(p):
+    from .engine import load_product
+    office = _office(p)
+    plan = office.plan(load_product(p.product), _load_requests(p.requests), p.quota)
+    plan.pop("analysis", None)
+    _print(plan)
+
+
+def cmd_loan_book(p):
+    from .engine import load_product
+    from .loan import VaultError
+    office = _office(p)
+    try:
+        order = office.book(p.order_id, load_product(p.product),
+                            _load_requests(p.requests), p.quota,
+                            T=p.T if p.T else None)
+    except VaultError as e:
+        _print({"rejected": True, "reason": str(e)})
+        sys.exit(2)
+    _print(order)
+
+
+def cmd_loan_order(p):
+    from .loan import Vault, VaultError
+    try:
+        _print(Vault(p.vault).get_order(p.order_id))
+    except VaultError as e:
+        _print({"rejected": True, "reason": str(e)})
+        sys.exit(2)
+
+
 # ----------------------------- 参数解析 ----------------------------- #
 
 def build_parser() -> argparse.ArgumentParser:
@@ -329,6 +401,50 @@ def build_parser() -> argparse.ArgumentParser:
     q = sub.add_parser("render-compare"); q.add_argument("--product", required=True)
     q.add_argument("--registry-root", required=True); q.add_argument("--T", required=True)
     q.set_defaults(fn=cmd_render_compare)
+
+    # ---- 借展剪接台 ---- #
+    q = sub.add_parser("reel-register")
+    q.add_argument("--vault", required=True)
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--accession", required=True, help="入藏号（一件实物一个号）")
+    q.add_argument("--asset-id", required=True)
+    q.add_argument("--cut-bounds", required=True, help="可切边界，逗号分隔，如 0,1,2,3,4")
+    q.add_argument("--note", default="")
+    q.set_defaults(fn=cmd_reel_register)
+
+    q = sub.add_parser("vault-show"); q.add_argument("--vault", required=True)
+    q.set_defaults(fn=cmd_vault_show)
+
+    q = sub.add_parser("loan-analyze")
+    q.add_argument("--vault", required=True)
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--product", required=True)
+    q.add_argument("--requests", required=True, help="请求 JSON 文件")
+    q.set_defaults(fn=cmd_loan_analyze)
+
+    q = sub.add_parser("loan-plan")
+    q.add_argument("--vault", required=True)
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--product", required=True)
+    q.add_argument("--requests", required=True)
+    q.add_argument("--quota", type=int, required=True, help="整批翻录拍数额度")
+    q.set_defaults(fn=cmd_loan_plan)
+
+    q = sub.add_parser("loan-book")
+    q.add_argument("--vault", required=True)
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--archive-root", required=True)
+    q.add_argument("--product", required=True)
+    q.add_argument("--requests", required=True)
+    q.add_argument("--quota", type=int, required=True)
+    q.add_argument("--order-id", required=True)
+    q.add_argument("--T", default=None, help="节目总时长（默认恰好覆盖最大请求区间）")
+    q.set_defaults(fn=cmd_loan_book)
+
+    q = sub.add_parser("loan-order")
+    q.add_argument("--vault", required=True)
+    q.add_argument("--order-id", required=True)
+    q.set_defaults(fn=cmd_loan_order)
 
     return ap
 
