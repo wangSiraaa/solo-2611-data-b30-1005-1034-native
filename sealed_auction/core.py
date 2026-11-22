@@ -40,6 +40,10 @@ class IdempotencyConflict(DomainError):
     pass
 
 
+class PressInfeasible(DomainError):
+    """No work order can satisfy every plate within the paper/change limits."""
+
+
 class DataIntegrityError(DomainError):
     pass
 

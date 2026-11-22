@@ -107,6 +107,67 @@ CREATE TABLE IF NOT EXISTS settlements (
     created_at             TEXT NOT NULL,
     cleared_at             TEXT
 );
+
+-- ---------------------------------------------------------------------------
+-- Fictional print shop: one unique type plate per settled winning original,
+-- press jobs composed of mounted batches, and every printed label tracked as
+-- either delivered to its own buyer or torn on the spot (never transferred).
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS press_plates (
+    plate_id       TEXT PRIMARY KEY,
+    auction_id     TEXT NOT NULL,
+    buyer          TEXT NOT NULL,
+    qty            INTEGER NOT NULL CHECK (qty > 0),
+    allowed_heads  TEXT NOT NULL,            -- JSON array, subset of ["L","R"]
+    holes          TEXT NOT NULL,            -- JSON array of 0/1, paper-edge order
+    flippable      INTEGER NOT NULL CHECK (flippable IN (0, 1)),
+    created_at     TEXT NOT NULL
+);
+-- A buyer's original maps to a single unique plate; it can never be duplicated
+-- into two heads, so (auction, buyer) is unique.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_plate_original
+    ON press_plates(auction_id, buyer);
+
+CREATE TABLE IF NOT EXISTS press_jobs (
+    job_id              TEXT PRIMARY KEY,
+    paper_limit         INTEGER NOT NULL CHECK (paper_limit > 0),
+    max_changes         INTEGER NOT NULL CHECK (max_changes >= 0),
+    paper_used          INTEGER NOT NULL DEFAULT 0,
+    changes_used        INTEGER NOT NULL DEFAULT 0,
+    torn_total          INTEGER NOT NULL DEFAULT 0,
+    status              TEXT NOT NULL CHECK (status IN ('PLANNED','PULLED')),
+    plan_json           TEXT NOT NULL,
+    created_at          TEXT NOT NULL,
+    pulled_at           TEXT
+);
+
+CREATE TABLE IF NOT EXISTS press_batches (
+    batch_seq       INTEGER NOT NULL,
+    job_id          TEXT NOT NULL REFERENCES press_jobs(job_id),
+    head_left       TEXT,                    -- plate_id or NULL (empty head)
+    head_right      TEXT,
+    orient_left     TEXT CHECK (orient_left IS NULL OR orient_left IN ('NORMAL','REVERSED')),
+    orient_right    TEXT CHECK (orient_right IS NULL OR orient_right IN ('NORMAL','REVERSED')),
+    sheets          INTEGER NOT NULL CHECK (sheets BETWEEN 1 AND 10),
+    is_change       INTEGER NOT NULL CHECK (is_change IN (0, 1)),
+    PRIMARY KEY (job_id, batch_seq)
+);
+
+CREATE TABLE IF NOT EXISTS press_labels (
+    seq           INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id        TEXT NOT NULL REFERENCES press_jobs(job_id),
+    batch_seq     INTEGER NOT NULL,
+    plate_id      TEXT NOT NULL REFERENCES press_plates(plate_id),
+    head          TEXT NOT NULL CHECK (head IN ('L','R')),
+    buyer         TEXT NOT NULL,
+    outcome       TEXT NOT NULL CHECK (outcome IN ('DELIVERED','TORN')),
+    request_id    TEXT NOT NULL,
+    at            TEXT NOT NULL,
+    FOREIGN KEY (job_id, batch_seq) REFERENCES press_batches(job_id, batch_seq)
+);
+CREATE INDEX IF NOT EXISTS idx_labels_job ON press_labels(job_id);
+CREATE INDEX IF NOT EXISTS idx_labels_plate ON press_labels(plate_id);
 """
 
 
