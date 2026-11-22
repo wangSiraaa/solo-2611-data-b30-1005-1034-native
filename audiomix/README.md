@@ -1,13 +1,17 @@
 # 多采样率剪辑时间轴与真实混音档案（audiomix）
 
 纯 Python 3.11 实现（NumPy/SciPy/标准 `wave`），无视频、无音频设备、无网页。
-两个独立服务：
+两个独立服务与一个校准求解器：
 
 1. **可独立编辑的音频时间轴服务**（`audiomix/timeline.py`）：插入/移动/修改/删除/
    区间查询/发布，clip 身份独立于素材，有理数时间，不渲染即可点查询。
 2. **实际混音数据仓**（`audiomix/archive.py`）：只消费不可变发布产品与实际素材字节，
    固定 16kHz 输出，按固定样本块存档，内容寻址复用，支持范围读取与逐块追溯；
    不读取编辑器私有操作日志，也接受外部合法时间轴产品。
+3. **试听厅校准与最低安装费求解**（`audiomix/hall.py`）：整数卷积精确反卷积
+
+   + 板况分柜的校验录音仓 + 以拍为单位的全厅离散模型，求让全部座位听到且无重影
+   的最低安装费，输出交接线、屏板、各座实响序列与真实 WAV 试听。
 
 ## 目录
 
@@ -18,9 +22,10 @@ audiomix/
   timeline.py    时间轴编辑器（整笔校验、点查询、不可变发布产品）
   engine.py      混音引擎：逐样本参考解释器 + 等价的 NumPy 分块向量化渲染
   archive.py     混音数据仓：内容寻址块存储 + SQLite 依赖索引 + 增量渲染 + 读取/追溯
+  hall.py        试听厅：整数反卷积 + 板况分柜录音仓 + 最低安装费求解 + 试听 WAV
   cli.py         命令行入口
-tests/           手算案例、数据仓案例、边界语义测试
-demo/            30 素材/100 clip/120s 规模案例与 CLI 端到端走查
+tests/           手算案例、数据仓案例、边界语义、试听厅校准测试
+demo/            30 素材/100 clip/120s 规模案例、试听厅两排试听席案例与 CLI 走查
 run_all_checks.sh 一键全量验证
 ```
 
@@ -82,9 +87,38 @@ python3 -m audiomix.cli read  --archive-root DIR/archive --render-id r1 --start 
 python3 -m audiomix.cli trace --archive-root DIR/archive --render-id r1 --start 0 --end 3200
 python3 -m audiomix.cli export-wav --archive-root DIR/archive --render-id r1 --out out.wav
 python3 -m audiomix.cli verify-integrity --archive-root DIR/archive
+
+# 试听厅校准（整数反卷积 / 交叉验证 / 最低安装费）
+python3 -m audiomix.cli hall-deconv --registry-root DIR/registry \
+    --excitation XID --observation YID --max-len 3       # 单路还原，失败给首处不符
+python3 -m audiomix.cli hall-validate --registry-root DIR/registry \
+    --speaker R --seat X --state bare \
+    --record R,X,bare,XID1,YID1,3 --record R,X,bare,XID2,YID2,3  # 另一真实试音片交叉验证
+python3 -m audiomix.cli hall-solve --registry-root DIR/registry \
+    --scenario scenario.json --out result.json --wav-dir out --summary
 ```
 
-完整端到端示例：`bash demo/cli_walkthrough.sh`；全量验证：`bash run_all_checks.sh`。
+完整端到端示例：`bash demo/cli_walkthrough.sh`、`python3 -m demo.hall_demo`；
+全量验证：`bash run_all_checks.sh`。
+
+## 试听厅校准语义（`hall.py`）
+
+- **激励/观测**：激励是从具名原剪辑发布并已渲染的短 PCM，`x[0] != 0`；观测是
+  另一份整段实录。模型为本地离散整数卷积 `y = x * h`（完整线性卷积，含末尾零），
+  响应长度上限 `H` 已知。
+- **精确整数反卷积**：逐拍长除还原有符号整数 `h[0..H-1]`。绝不把截断、舍入、
+  饱和或超长尾巴解释成“另一次反射”；若不能逐样本用长度 `H` 的整数响应还原，
+  返回首个不符的**观测样本下标**与类别（`truncated`/`non_integer`/`tail_mismatch`/
+  `extra_tail`/`bad_excitation`）。
+- **板况分柜**：每份校验录音绑定（喇叭, 座位, 板况）；`recover` 只从同板况取记录，
+  开板/闭板两套记录**不可互借**（缺记录直接报错）。可用另一真实试音片交叉验证同一路。
+- **全厅离散模型**：各喇叭可任选其明列的一种工作状态（裸机/装自己的板）与非负整数
+  电延迟，各带安装费。延迟把该喇叭到所有座位的整条响应整体右移；装板换用该机对
+  各座位已核出的相应响应。某座同拍全部有符号贡献**先求和**，`|和| >= 门限` 才算响；
+  同拍正负响应相消为 0，不算两声。每座第一声不得晚于本座 `latest_onset`；第一声后
+  拍差超过 `allowed_gap` 仍有达门限声响即重影。遍历全部 (状态, 延迟) 组合求最低总费用。
+- **交付物**：屏板（各喇叭状态/延迟/费用）、交接线（每座逐拍先求和明细及达门限标记）、
+  各座实响序列、真实 WAV 试听（每座 + 混合；加窗正弦，峰值远离 16 位饱和）。
 
 ## 验证策略（不使用任何外部混音结果）
 
@@ -96,6 +130,11 @@ python3 -m audiomix.cli verify-integrity --archive-root DIR/archive
   零误用、外部产品篡改拒绝、编辑器日志移走后旧 render 仍可读。
 - `tests/test_edge.py`：非整数 T、左闭右开边界、非法修改回滚、持久化重开、
   “先求和后单次舍入”与“逐片段先舍入”的语义区分。
+- `tests/test_hall.py`：真实例 `[1,1]*[2,1]=[2,3,1]`；含末尾零与超长尾；截断/非整数/
+  尾部不符各给首处不符；同拍正负相消不算两声；板况记录不可互借；另一真实试音片交叉
+  验证；缺记录/反卷积失败/不可行三类异常；主场景最低费 2、换实测 0、装板 3。
+- `demo/hall_demo.py`：激励经时间轴发布并渲染（首样本非零，故也能用精确反卷积还原）；
+  两排试听席端到端求最低费、打印屏板/交接线/各座实响、导出并校验真实 WAV。
 - `demo/scale_demo.py`：30 素材（每采样率 10 个）、100 clip、120 秒/192 万样本，
   含全部要求情形；窗口化逐样本交叉核对，输出 WAV、块峰值、削顶数与来源索引。
 

@@ -232,6 +232,78 @@ def cmd_render_compare(p):
             "identical": bool(mismatch == 0)})
 
 
+# ----------------------------- 试听厅校准 ----------------------------- #
+
+def cmd_hall_deconv(p):
+    """用精确整数长除还原单路响应；不能逐样本还原则给出首处不符。"""
+    from .hall import deconvolve_integer
+    reg = _registry(p.registry_root)
+    x = reg.load_pcm(p.excitation).tolist()
+    y = reg.load_pcm(p.observation).tolist()
+    _print(deconvolve_integer(x, y, p.max_len).to_json())
+
+
+def cmd_hall_validate(p):
+    """用另一真实试音片交叉验证一路（多份记录须还原同一响应）。"""
+    from .hall import CalibrationStore
+    store = CalibrationStore(_registry(p.registry_root))
+    for rec in p.record:
+        # 形如 speaker,seat,state,excitation,observation,max_len
+        s, seat, state, exc, obs, ml = rec.split(",")
+        store.add_record(s, seat, state, exc, obs, int(ml))
+    _print(store.validate_path(p.speaker, p.seat, p.state))
+
+
+def _hall_problem_from_spec(spec: dict, registry_root: str):
+    from .hall import CalibrationStore, SeatSpec, build_hall
+    reg = _registry(registry_root)
+    store = CalibrationStore(reg)
+    for path in spec["paths"]:
+        store.add_record(path["speaker"], path["seat"], path["state"],
+                         path["excitation"], path["observation"],
+                         int(path["max_len"]), note=path.get("note", ""))
+    seats = tuple(spec["seats"])
+    return build_hall(
+        store, tuple(spec["speakers"]), seats,
+        {s: tuple(v) for s, v in spec["states"].items()},
+        {s: tuple(int(x) for x in v) for s, v in spec["delays"].items()},
+        {s: {st: int(c) for st, c in d.items()}
+         for s, d in spec["state_cost"].items()},
+        {s: {int(d): int(c) for d, c in d2.items()}
+         for s, d2 in spec["delay_cost"].items()},
+        {a: SeatSpec(int(v["threshold"]), int(v["latest_onset"]),
+                     int(v["allowed_gap"])) for a, v in spec["seat_specs"].items()},
+    )
+
+
+def cmd_hall_solve(p):
+    """求解最低安装费配置，输出屏板/交接线/各座实响序列，并可导出试听 WAV。"""
+    import json as _json
+    from .hall import DeconvFailure, HallInfeasible, export_audition_wavs
+    spec = _json.load(open(p.scenario, encoding="utf-8"))
+    try:
+        problem, _ = _hall_problem_from_spec(spec, p.registry_root)
+        sol = problem.solve()
+    except DeconvFailure as e:
+        _print({"feasible": False, "reason": "deconv_failure",
+                "path": e.path, "first_mismatch": e.result.first_mismatch,
+                "kind": e.result.kind, "detail": e.result.detail})
+        sys.exit(2)
+    except HallInfeasible as e:
+        _print({"feasible": False, "reason": "infeasible", "detail": str(e)})
+        sys.exit(2)
+    result = sol.to_json()
+    if p.wav_dir:
+        result["wavs"] = export_audition_wavs(sol, p.wav_dir)
+    if p.out:
+        with open(p.out, "w", encoding="utf-8") as fh:
+            _json.dump(result, fh, ensure_ascii=False, indent=2)
+    if p.summary:
+        print(sol.summary_text())
+    else:
+        _print(result)
+
+
 # ----------------------------- 参数解析 ----------------------------- #
 
 def build_parser() -> argparse.ArgumentParser:
@@ -329,6 +401,32 @@ def build_parser() -> argparse.ArgumentParser:
     q = sub.add_parser("render-compare"); q.add_argument("--product", required=True)
     q.add_argument("--registry-root", required=True); q.add_argument("--T", required=True)
     q.set_defaults(fn=cmd_render_compare)
+
+    # 试听厅校准
+    q = sub.add_parser("hall-deconv", help="单路精确整数反卷积")
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--excitation", required=True, help="激励素材 asset_id")
+    q.add_argument("--observation", required=True, help="观测素材 asset_id")
+    q.add_argument("--max-len", dest="max_len", type=int, required=True,
+                   help="已知响应长度上限 H")
+    q.set_defaults(fn=cmd_hall_deconv)
+
+    q = sub.add_parser("hall-validate", help="用另一真实试音片交叉验证一路")
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--speaker", required=True)
+    q.add_argument("--seat", required=True)
+    q.add_argument("--state", required=True, choices=("bare", "panel"))
+    q.add_argument("--record", action="append", required=True,
+                   help="speaker,seat,state,excitation_asset,observation_asset,max_len")
+    q.set_defaults(fn=cmd_hall_validate)
+
+    q = sub.add_parser("hall-solve", help="求最低安装费全厅配置")
+    q.add_argument("--registry-root", required=True)
+    q.add_argument("--scenario", required=True, help="场景 JSON")
+    q.add_argument("--out", help="结果 JSON 输出路径")
+    q.add_argument("--wav-dir", dest="wav_dir", help="导出每座试听 WAV 的目录")
+    q.add_argument("--summary", action="store_true", help="仅打印人类可读摘要")
+    q.set_defaults(fn=cmd_hall_solve)
 
     return ap
 
