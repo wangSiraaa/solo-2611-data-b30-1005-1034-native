@@ -639,3 +639,314 @@ class ScaleTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class OralVoucherTest(unittest.TestCase):
+    """口述凭单：真实取件候选、顺序核正、连续同作品合段、旧版凭单可查。"""
+
+    def setUp(self) -> None:
+        self.system = LibrarySystem(":memory:")
+        self.books = ["A", "B", "C", "X"]
+        self.copies = self._copies()
+        self.system.catalog.submit_revision(
+            "v1", self.books, [], self.copies, op_id="cat-v1"
+        )
+        self._seq = 0
+
+    def tearDown(self) -> None:
+        self.system.close()
+
+    @staticmethod
+    def _copies() -> list[dict[str, str]]:
+        return [
+            {"id": "CA1", "book": "A", "branch": "n", "format": "f"},
+            {"id": "CA2", "book": "A", "branch": "n", "format": "f"},
+            {"id": "CB1", "book": "B", "branch": "n", "format": "f"},
+            {"id": "CB2", "book": "B", "branch": "n", "format": "f"},
+            {"id": "CB3", "book": "B", "branch": "n", "format": "f"},
+            {"id": "CC1", "book": "C", "branch": "n", "format": "f"},
+            {"id": "CC2", "book": "C", "branch": "n", "format": "f"},
+            {"id": "CX1", "book": "X", "branch": "n", "format": "f"},
+        ]
+
+    def _reserve(self, reader: str, work: str, copy: str) -> str:
+        self._seq += 1
+        tid = f"T-{reader}-{copy}"
+        self.system.ledger.register_ticket(
+            tid, reader, work, self._seq, ["n"], ["f"], op_id=f"tk-{tid}"
+        )
+        h = self.system.ledger.reserve(f"rs-{tid}", "v1", copy)
+        self.assertEqual(h["status"], "ok", h)
+        return h["hold_id"]
+
+    def _pickup(self, reader: str, work: str, copy: str) -> str:
+        hid = self._reserve(reader, work, copy)
+        r = self.system.ledger.pickup(f"pk-{reader}-{copy}", hid, reader, copy)
+        self.assertEqual(r["status"], "ok", r)
+        return hid
+
+    def _seed_three_readers(self) -> dict[tuple[str, str], str]:
+        holds = {
+            ("甲", "A"): self._pickup("甲", "A", "CA1"),
+            ("甲", "B"): self._pickup("甲", "B", "CB1"),
+            ("甲", "C"): self._pickup("甲", "C", "CC1"),
+            ("乙", "A"): self._pickup("乙", "A", "CA2"),
+            ("乙", "B"): self._pickup("乙", "B", "CB2"),
+            ("丙", "B"): self._pickup("丙", "B", "CB3"),
+            ("丙", "C"): self._pickup("丙", "C", "CC2"),
+            ("乙", "X"): self._pickup("乙", "X", "CX1"),
+        }
+        read = self.system.orals.register_reading
+        read("r-甲0", holds[("甲", "A")], 0, True)
+        read("r-甲1", holds[("甲", "B")], 1, True)
+        read("r-甲2", holds[("甲", "C")], 2, True)
+        read("r-乙0", holds[("乙", "A")], 0, True)
+        read("r-乙1", holds[("乙", "B")], 1, True)
+        read("r-丙0", holds[("丙", "B")], 0, True)
+        read("r-丙1", holds[("丙", "C")], 1, True)
+        return holds
+
+    def _seed_sessions(self) -> None:
+        o = self.system.orals
+        o.register_session("s-甲", "S甲", 1, 1)
+        o.register_session("s-乙", "S乙", 1, 3)
+        o.register_session("s-丙", "S丙", 1, 5)
+        o.signup("sg-甲", "甲", "S甲")
+        o.signup("sg-乙", "乙", "S乙")
+        o.signup("sg-丙", "丙", "S丙")
+
+    # ------------------------------------------------------- 真实取件候选边界
+    def test_only_fulfilled_pickup_is_candidate(self) -> None:
+        hid = self._reserve("甲", "A", "CA1")  # held，尚未取件
+        r = self.system.orals.register_reading("bad1", hid, 0, True)
+        self.assertEqual(r["status"], "rejected")
+        self.assertEqual(r["error"]["reason"], "pickup_not_fulfilled")
+        # 过期保留同样不算
+        self.system.ledger.release("rel1", hid, "expired")
+        r2 = self.system.orals.register_reading("bad2", hid, 0, True)
+        self.assertEqual(r2["error"]["reason"], "pickup_not_fulfilled")
+
+    def test_wrong_reader_pickup_never_fulfilled(self) -> None:
+        hid = self._reserve("甲", "A", "CA1")
+        bad = self.system.ledger.pickup("bad-pk", hid, "乙", "CA1")
+        self.assertEqual(bad["error"]["reason"], "reader_mismatch")
+        r = self.system.orals.register_reading("bad-rd", hid, 0, True)
+        self.assertEqual(r["status"], "rejected")
+        self.assertEqual(r["error"]["reason"], "pickup_not_fulfilled")
+
+    def test_order_conflict_requires_correction(self) -> None:
+        h1 = self._pickup("甲", "A", "CA1")
+        h2 = self._pickup("甲", "B", "CB1")
+        self.system.orals.register_reading("r1", h1, 0, True)
+        r = self.system.orals.register_reading("r2", h2, 0, True)
+        self.assertEqual(r["status"], "rejected")
+        self.assertEqual(r["error"]["reason"], "order_conflict")
+        # 核正：撤回再登记
+        rid = self.system.orals.get_readings("甲")[0]["reading_id"]
+        self.system.orals.retract_reading("rt", rid)
+        self.assertEqual(
+            self.system.orals.register_reading("r3", h1, 1, True)["status"], "ok"
+        )
+
+    # ------------------------------------------------------------ 三段排展
+    def test_three_scenarios_min_fees(self) -> None:
+        holds = self._seed_three_readers()
+        self._seed_sessions()
+        o, ex = self.system.orals, self.system.exhibition
+
+        # 场景 1：甲不能同时讲两段 → 最省请乙讲 AB、甲讲 BC，费 4
+        o.issue_vouchers("iv1", "v1")
+        p1 = ex.plan_exhibition("p1", "P1", "v1", "A", "C", ["B"])
+        self.assertEqual(p1["status"], "ok")
+        self.assertEqual(p1["chain"], ["A", "B", "C"])
+        self.assertEqual(p1["total_fee"], 4)
+        by_edge = {e["edge_index"]: e for e in p1["edges"]}
+        self.assertEqual(by_edge[0]["reader"], "乙")
+        self.assertEqual(by_edge[1]["reader"], "甲")
+        # 逐段带出两端真实取件
+        self.assertEqual(by_edge[0]["from_hold"], holds[("乙", "A")])
+        self.assertEqual(by_edge[0]["to_hold"], holds[("乙", "B")])
+
+        # 场景 2：补录乙 A、B 之间的真实 X 取件（不许公开）→ 乙无 AB 凭单
+        self._retract_reader_read("乙", "B")
+        self.assertEqual(
+            o.register_reading("r-乙X", holds[("乙", "X")], 1, False)["status"], "ok"
+        )
+        self.assertEqual(
+            o.register_reading("r-乙B2", holds[("乙", "B")], 2, True)["status"], "ok"
+        )
+        o.issue_vouchers("iv2", "v1")
+        # 乙的 A、X、B 中 X 不同意，A/B 之间隔着未同意的 X 段 → 不出 AB
+        self.assertNotIn(
+            ("乙", "A", "B"),
+            {(v["reader"], v["from_canonical"], v["to_canonical"])
+             for v in o.get_vouchers("v1")},
+        )
+        p2 = ex.plan_exhibition("p2", "P2", "v1", "A", "C", ["B"])
+        self.assertEqual(p2["status"], "ok")
+        self.assertEqual(p2["total_fee"], 6)  # 甲 AB + 丙 BC
+        by2 = {e["edge_index"]: e for e in p2["edges"]}
+        self.assertEqual(by2[0]["reader"], "甲")
+        self.assertEqual(by2[1]["reader"], "丙")
+
+        # 场景 3：恢复原凭单，仅把丙场开场费改 1 → 甲 AB + 丙 BC，费 2
+        self._retract_reader_read("乙", "X")
+        self._retract_reader_read("乙", "B")
+        self.assertEqual(
+            o.register_reading("r-乙B3", holds[("乙", "B")], 1, True)["status"], "ok"
+        )
+        o.issue_vouchers("iv3", "v1")
+        o.set_session_fee("fee-丙", "S丙", 1)
+        p3 = ex.plan_exhibition("p3", "P3", "v1", "A", "C", ["B"])
+        self.assertEqual(p3["status"], "ok")
+        self.assertEqual(p3["total_fee"], 2)
+        by3 = {e["edge_index"]: e for e in p3["edges"]}
+        self.assertEqual(by3[0]["reader"], "甲")
+        self.assertEqual(by3[1]["reader"], "丙")
+
+    def _retract_reader_read(self, reader: str, book: str) -> None:
+        rows = [
+            r for r in self.system.orals.get_readings(reader)
+            if r["original_bib"] == book
+        ]
+        self.assertEqual(len(rows), 1, rows)
+        self.system.orals.retract_reading(
+            f"rt-{reader}-{book}-{rows[0]['reading_id']}", rows[0]["reading_id"]
+        )
+
+    # -------------------------------------------------- 一人只讲一次/席位
+    def test_one_reader_cannot_take_two_edges(self) -> None:
+        # 只有甲同时有 AB 与 BC 凭单，且 A、B、C 必经 -> 甲不能两段
+        ha = self._pickup("甲", "A", "CA1")
+        hb = self._pickup("甲", "B", "CB1")
+        hc = self._pickup("甲", "C", "CC1")
+        o = self.system.orals
+        o.register_reading("r1", ha, 0, True)
+        o.register_reading("r2", hb, 1, True)
+        o.register_reading("r3", hc, 2, True)
+        o.register_session("s-甲", "S甲", 4, 1)
+        o.signup("sg", "甲", "S甲")
+        o.issue_vouchers("iv", "v1")
+        p = self.system.exhibition.plan_exhibition("p", "P", "v1", "A", "C", ["B"])
+        self.assertEqual(p["status"], "rejected")
+        self.assertEqual(p["error"]["reason"], "no_feasible_plan")
+
+    def test_session_capacity_and_shared_fee(self) -> None:
+        self._seed_three_readers()
+        o, ex = self.system.orals, self.system.exhibition
+        # 一场容量 2、费 7，三位读者都签同一场
+        o.register_session("s-all", "Sall", 2, 7)
+        for r in ("甲", "乙", "丙"):
+            o.signup(f"sg-{r}", r, "Sall")
+        o.issue_vouchers("iv", "v1")
+        p = ex.plan_exhibition("p", "P", "v1", "A", "C", ["B"])
+        self.assertEqual(p["status"], "ok")
+        # 两段都在同一场，开场费只收一次 7
+        self.assertEqual(p["total_fee"], 7)
+        self.assertEqual(len(p["opened_sessions"]), 1)
+        self.assertEqual({e["session"] for e in p["edges"]}, {"Sall"})
+        self.assertEqual({e["seat"] for e in p["edges"]}, {1, 2})
+
+    def test_reader_only_attends_signed_session(self) -> None:
+        self._seed_three_readers()
+        o, ex = self.system.orals, self.system.exhibition
+        # 丙未签 S丙（最初没签），只有甲、乙签过
+        o.signup("un-丙", "丙", "S丙")  # 取消丙的签认
+        o.issue_vouchers("iv", "v1")
+        p = ex.plan_exhibition("p", "P", "v1", "A", "C", ["B"])
+        self.assertEqual(p["status"], "rejected")
+        self.assertEqual(p["error"]["reason"], "no_feasible_plan")
+
+    # --------------------------------------------------------- 归并合成一段
+    def test_merge_makes_two_old_edges_one_segment(self) -> None:
+        sys = LibrarySystem(":memory:")
+        copies = [
+            {"id": "CP", "book": "P", "branch": "n", "format": "f"},
+            {"id": "CQ", "book": "Q", "branch": "n", "format": "f"},
+        ]
+        sys.catalog.submit_revision("va", ["P", "Q"], [], copies, op_id="c-va")
+        # 丁真实读 P 再读 Q
+        sys.ledger.register_ticket("TP", "丁", "P", 1, ["n"], ["f"], op_id="tp")
+        hp = sys.ledger.reserve("rsp", "va", "CP")
+        sys.ledger.pickup("pkp", hp["hold_id"], "丁", "CP")
+        sys.ledger.register_ticket("TQ", "丁", "Q", 2, ["n"], ["f"], op_id="tq")
+        hq = sys.ledger.reserve("rsq", "va", "CQ")
+        sys.ledger.pickup("pkq", hq["hold_id"], "丁", "CQ")
+        sys.orals.register_reading("rp", hp["hold_id"], 0, True)
+        sys.orals.register_reading("rq", hq["hold_id"], 1, True)
+
+        # va：P、Q 是两个规范作品 → 一条 P→Q 凭单
+        sys.orals.issue_vouchers("iv-va", "va")
+        va_vouchers = sys.orals.get_vouchers("va")
+        self.assertEqual(len(va_vouchers), 1)
+        v = va_vouchers[0]
+        self.assertEqual((v["from_canonical"], v["to_canonical"]), ("P", "Q"))
+        self.assertEqual((v["from_book"], v["to_book"]), ("P", "Q"))
+        self.assertEqual(v["from_hold"], hp["hold_id"])
+        self.assertEqual(v["to_hold"], hq["hold_id"])
+
+        # vb：Q 归并到 P → 连续同作品合为一段，不再有内部过渡凭单
+        sys.catalog.submit_revision(
+            "vb", ["P", "Q"], [{"from": "Q", "to": "P"}], copies, op_id="c-vb"
+        )
+        sys.catalog.activate_revision("vb")
+        iv = sys.orals.issue_vouchers("iv-vb", "vb")
+        self.assertEqual(iv["vouchers"], [])
+        trail = sys.orals.reader_trail("丁", "vb")
+        self.assertEqual(len(trail["segments"]), 1)
+        self.assertEqual(
+            (trail["segments"][0]["from_book"], trail["segments"][0]["to_book"]),
+            ("P", "Q"),
+        )
+
+        # 旧版凭单仍能回答是哪两本（原始书目 P、Q 与两端真实取件都在）
+        old = sys.orals.get_voucher(v["voucher_id"])
+        self.assertEqual((old["from_book"], old["to_book"]), ("P", "Q"))
+        self.assertEqual(old["revision"], "va")
+        sys.close()
+
+
+class HubBridgeTest(unittest.TestCase):
+    """分馆只有一两种规范作品可作中介，但留下许多读者证词。"""
+
+    def test_single_hub_bridges_two_branches(self) -> None:
+        s = LibrarySystem(":memory:")
+        # S 起始馆、T 终点馆、H 唯一中介作品；只有 H 与两端有凭单
+        copies = [
+            {"id": "CS", "book": "S", "branch": "n", "format": "f"},
+            {"id": "CH1", "book": "H", "branch": "n", "format": "f"},
+            {"id": "CH2", "book": "H", "branch": "n", "format": "f"},
+            {"id": "CT", "book": "T", "branch": "n", "format": "f"},
+        ]
+        s.catalog.submit_revision("v1", ["S", "H", "T"], [], copies, op_id="c")
+        seq = [0]
+
+        def full(reader: str, a: str, b: str, ca: str, cb: str) -> None:
+            seq[0] += 1
+            s.ledger.register_ticket(f"T{seq[0]}", reader, a, seq[0], ["n"], ["f"],
+                                     op_id=f"t{seq[0]}")
+            h = s.ledger.reserve(f"r{seq[0]}", "v1", ca)
+            s.ledger.pickup(f"p{seq[0]}", h["hold_id"], reader, ca)
+            s.orals.register_reading(f"d{seq[0]}", h["hold_id"], 0, True)
+            seq[0] += 1
+            s.ledger.register_ticket(f"T{seq[0]}", reader, b, seq[0], ["n"], ["f"],
+                                     op_id=f"t{seq[0]}")
+            h2 = s.ledger.reserve(f"r{seq[0]}", "v1", cb)
+            s.ledger.pickup(f"p{seq[0]}", h2["hold_id"], reader, cb)
+            s.orals.register_reading(f"d{seq[0]}", h2["hold_id"], 1, True)
+
+        # r1 能讲 S→H，r3 能讲 H→T（各用一册 H 副本）
+        full("r1", "S", "H", "CS", "CH1")
+        full("r3", "H", "T", "CH2", "CT")
+        o = s.orals
+        o.register_session("sa", "A", 5, 2)
+        o.register_session("sb", "B", 5, 3)
+        for r in ("r1", "r3"):
+            o.signup(f"g-{r}", r, "A")
+        o.issue_vouchers("iv", "v1")
+        p = s.exhibition.plan_exhibition("pl", "P", "v1", "S", "T", ["H"])
+        self.assertEqual(p["status"], "ok")
+        self.assertEqual(p["chain"], ["S", "H", "T"])
+        self.assertEqual(p["total_fee"], 2)  # 两段同一场，只收一次
+        self.assertEqual([e["reader"] for e in p["edges"]], ["r1", "r3"])
+        s.close()

@@ -1,4 +1,4 @@
-# 合并书目下的预约先后与副本兑现
+# 合并书目下的预约先后、副本兑现与口述凭单
 
 Python 3.11 + 标准库 SQLite，无第三方依赖。全部数据合成，材料输入在
 `materials/765/input.json`。
@@ -7,10 +7,10 @@ Python 3.11 + 标准库 SQLite，无第三方依赖。全部数据合成，材�
 
 ```bash
 python3.11 demo.py                      # 端到端演示，内置断言，退出码 0 即全部兑现
-python3.11 -m unittest tests -v         # 32 个测试（含 500 副本/1000 票据规模用例）
+python3.11 -m unittest tests -v         # 41 个测试（含 500 副本/1000 票据规模用例）
 ```
 
-## 两个独立子系统
+## 四个子系统
 
 ### 目录（`library/catalog.py`）
 
@@ -36,6 +36,27 @@ python3.11 -m unittest tests -v         # 32 个测试（含 500 副本/1000 票
 - 操作 ID + 请求指纹：同文重放原样返回，异文抛 `IdempotencyConflict` 且不写库；
   业务拒绝落 `rejected` 回执，失败不产生部分占用。
 
+### 口述凭单（`library/orals.py`）
+
+- **只有真实成功的取件**（保留 `fulfilled`）才能登记为“读过”；保留未取件、过期、
+  取消、错人取件一律拒绝（`pickup_not_fulfilled`）。
+- 每条阅读绑定唯一取件，记录读者、副本、原始书目、读者**自己的次序**与是否同意公开；
+  同一读者同一次序冲突必须**核正**（撤回后重登），库层部分唯一索引同样兜底。
+- 出具凭单用**选定目录修订**把原副本作品归一，连续读同一规范作品合为一段；
+  只在不同规范段之间、且两端都获准引用时，才交出一条有向过渡凭单。
+  中间若夹着未同意的整段，两侧不会被拼接。
+- 凭单给出两端真实取件（hold/copy）、受访人与两端原始书目。出具是“快照 + epoch”：
+  补录/撤回后重新出具，**旧 epoch 凭单永久保留**，目录拆并后仍能回答是哪两本。
+- `reader_trail` 可从一个读者的票据追查其真实相邻段与凭单。
+
+### 书链排展（`library/exhibition.py`）
+
+- 给定起点、终点、必经作品（最多 9 部）与可用采访场次（最多 6 场），求一条
+  “起点→终点、必经各一次、各不重复”的单条书链。
+- 每相邻过渡由一名持有效凭单的实际读者担任讲述；**同一位读者全链最多讲一次**；
+  一场可容多位受访人但**开场费只收一次**，每场席位有限；读者只在自己签过的场次出席。
+- 目标：最小化所开采访场的开场费总和。逐段落出受访人、场次与席位（同场同席不能改签他人）。
+
 ## 材料场景的兑现结果
 
 | 操作 | 结果 |
@@ -48,13 +69,23 @@ python3.11 -m unittest tests -v         # 32 个测试（含 500 副本/1000 票
 | J4（RA 取 C3） | `reader_mismatch` 拒绝，H3 不被消耗 |
 | J5（RC 取 C3） | 成功；合并后 C3 仍只能由 TC 的读者 RC 兑现 |
 
+口述排展三次合成场景（A 起、C 止、必经 B，每场 1 席）：
+
+| 场景 | 结果 | 开场费 |
+| --- | --- | --- |
+| 甲读 A、B、C；乙读 A、B；丙读 B、C（场费 1/3/5） | 乙讲 AB、甲讲 BC（甲不能同时讲两段） | 4 |
+| 补录乙 A、B 之间真实 X 取件且不许公开 | 乙无 AB 凭单；甲讲 AB、丙讲 BC | 6 |
+| 恢复原凭单，仅把丙场开场费改为 1 | 甲讲 AB、丙讲 BC | 2 |
+
 ## 代码地图
 
 ```
-library/db.py       SQLite schema、显式事务、操作指纹、回执与版本计数器
-library/catalog.py  修订快照、边校验/环检测、多跳规范解析、拆别名、目录查询
-library/ledger.py   票据、prepare/commit、reserve、pickup、release、公开查询
-library/system.py   门面与重开（LibrarySystem.reopen）
-demo.py             材料严格重放 + 拆别名/环拒绝/过期重选/幂等/重开场景
-tests.py            unittest 测试与规模验证
+library/db.py          SQLite schema、显式事务、操作指纹、回执与版本计数器
+library/catalog.py     修订快照、边校验/环检测、多跳规范解析、拆别名、目录查询
+library/ledger.py      票据、prepare/commit、reserve、pickup、release、公开查询
+library/orals.py       真实取件上的阅读登记、次序核正、凭单出具/旧版留存、场次签认
+library/exhibition.py  单源单汇必经排列 + 受访人/场次/席位分配的最省开场费求解
+library/system.py      门面与重开（LibrarySystem.reopen）
+demo.py                材料严格重放 + 口述凭单/三次排展/目录归并场景
+tests.py               unittest 测试与规模验证
 ```

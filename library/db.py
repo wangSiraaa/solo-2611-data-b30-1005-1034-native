@@ -135,6 +135,102 @@ CREATE TABLE IF NOT EXISTS receipts (
     created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_receipts_op ON receipts(op_id);
+
+-- ------------------------------------------------------------------ 口述凭单
+-- 读者签认的真实阅读：每条只挂在一次真实成功的取件（fulfilled 保留）上。
+-- 保留/过期/取消/错人取件都不满足，因而无法登记。
+-- order_no 是读者自己的阅读次序；同一读者同一次序冲突，须核正后才可登记。
+CREATE TABLE IF NOT EXISTS readings (
+    reading_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    hold_id         TEXT NOT NULL,               -- 一次取件最多一条未撤回的阅读
+    ticket_id       TEXT NOT NULL,
+    reader_id       TEXT NOT NULL,
+    copy_id         TEXT NOT NULL,
+    original_bib    TEXT NOT NULL,               -- 取件时副本的原始书目（不随目录改）
+    order_no        INTEGER NOT NULL,
+    citable         INTEGER NOT NULL CHECK (citable IN (0, 1)),
+    retracted       INTEGER NOT NULL DEFAULT 0 CHECK (retracted IN (0, 1)),
+    pickup_revision TEXT NOT NULL,               -- 取件当时锁定的目录修订
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_readings_reader ON readings(reader_id, order_no);
+-- 一次取件只允许一条未撤回的阅读；撤回的旧行保留供审计，可重新登记核正
+CREATE UNIQUE INDEX IF NOT EXISTS idx_readings_hold_active
+    ON readings(hold_id) WHERE retracted = 0;
+-- 同一读者同一次序只允许一条未撤回的阅读
+CREATE UNIQUE INDEX IF NOT EXISTS idx_readings_reader_order_active
+    ON readings(reader_id, order_no) WHERE retracted = 0;
+
+-- 采访场次：有限席位与一次性开场费
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    capacity   INTEGER NOT NULL CHECK (capacity >= 0),
+    fee        INTEGER NOT NULL CHECK (fee >= 0),
+    created_at TEXT NOT NULL
+);
+
+-- 读者签过名的采访场次（只在自己签过的场次出席）
+CREATE TABLE IF NOT EXISTS session_signups (
+    reader_id  TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    PRIMARY KEY (reader_id, session_id),
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+);
+
+-- 已交出版的口述凭单：记录当时所用的目录修订、规范两端与两端真实取件，
+-- 并额外保存原始书目，使目录后来拆并时旧凭单仍能回答“是哪两本”。
+-- 每次重新出具产生新 epoch，旧 epoch 全部保留可查；排展只取最新 epoch。
+CREATE TABLE IF NOT EXISTS vouchers (
+    voucher_id     TEXT PRIMARY KEY,
+    revision       TEXT NOT NULL,
+    epoch          INTEGER NOT NULL,
+    reader_id      TEXT NOT NULL,
+    from_canonical TEXT NOT NULL,
+    to_canonical   TEXT NOT NULL,
+    from_reading   INTEGER NOT NULL,
+    to_reading     INTEGER NOT NULL,
+    from_book      TEXT NOT NULL,
+    to_book        TEXT NOT NULL,
+    from_hold      TEXT NOT NULL,
+    to_hold        TEXT NOT NULL,
+    from_copy      TEXT NOT NULL,
+    to_copy        TEXT NOT NULL,
+    created_at     TEXT NOT NULL,
+    UNIQUE (revision, epoch, reader_id, from_reading, to_reading)
+);
+CREATE INDEX IF NOT EXISTS idx_vouchers_rev_epoch ON vouchers(revision, epoch);
+CREATE INDEX IF NOT EXISTS idx_vouchers_edge
+    ON vouchers(revision, epoch, from_canonical, to_canonical);
+
+-- 落定的排展计划：逐段受访人、场次与席位（同场同席不能再签给另一人）
+CREATE TABLE IF NOT EXISTS plans (
+    plan_id    TEXT PRIMARY KEY,
+    revision   TEXT NOT NULL,
+    chain      TEXT NOT NULL,
+    total_fee  INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS plan_sessions (
+    plan_id    TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    fee        INTEGER NOT NULL,
+    PRIMARY KEY (plan_id, session_id),
+    FOREIGN KEY (plan_id) REFERENCES plans(plan_id)
+);
+CREATE TABLE IF NOT EXISTS plan_edges (
+    plan_id    TEXT NOT NULL,
+    edge_index INTEGER NOT NULL,
+    from_work  TEXT NOT NULL,
+    to_work    TEXT NOT NULL,
+    reader_id  TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    seat_no    INTEGER NOT NULL,
+    voucher    TEXT,
+    PRIMARY KEY (plan_id, edge_index),
+    UNIQUE (plan_id, reader_id),              -- 一人最多讲一次
+    UNIQUE (plan_id, session_id, seat_no),    -- 同一席不能签给另一人
+    FOREIGN KEY (plan_id) REFERENCES plans(plan_id)
+);
 """
 
 

@@ -82,6 +82,159 @@ def banner(title: str) -> None:
     print("=" * 72)
 
 
+def demo_orals_and_exhibition() -> None:
+    """口述凭单与三次排展：只用真实成功取件，按选定目录归一后交出版。"""
+    banner("口述凭单与书链排展（独立合成场景）")
+    s = LibrarySystem(":memory:")
+    books = ["A", "B", "C", "X"]
+    copies = [
+        {"id": "CA1", "book": "A", "branch": "n", "format": "f"},
+        {"id": "CA2", "book": "A", "branch": "n", "format": "f"},
+        {"id": "CB1", "book": "B", "branch": "n", "format": "f"},
+        {"id": "CB2", "book": "B", "branch": "n", "format": "f"},
+        {"id": "CB3", "book": "B", "branch": "n", "format": "f"},
+        {"id": "CC1", "book": "C", "branch": "n", "format": "f"},
+        {"id": "CC2", "book": "C", "branch": "n", "format": "f"},
+        {"id": "CX1", "book": "X", "branch": "n", "format": "f"},
+        {"id": "CA3", "book": "A", "branch": "n", "format": "f"},
+    ]
+    s.catalog.submit_revision("v1", books, [], copies, op_id="oc-cat")
+    seq = [0]
+
+    def pickup(reader: str, work: str, copy: str) -> str:
+        seq[0] += 1
+        tid = f"T-{reader}-{copy}"
+        s.ledger.register_ticket(tid, reader, work, seq[0], ["n"], ["f"],
+                                 op_id=f"tk-{tid}")
+        h = s.ledger.reserve(f"rs-{tid}", "v1", copy)
+        r = s.ledger.pickup(f"pk-{tid}", h["hold_id"], reader, copy)
+        assert r["status"] == "ok", r
+        return h["hold_id"]
+
+    holds = {
+        ("甲", "A"): pickup("甲", "A", "CA1"),
+        ("甲", "B"): pickup("甲", "B", "CB1"),
+        ("甲", "C"): pickup("甲", "C", "CC1"),
+        ("乙", "A"): pickup("乙", "A", "CA2"),
+        ("乙", "B"): pickup("乙", "B", "CB2"),
+        ("丙", "B"): pickup("丙", "B", "CB3"),
+        ("丙", "C"): pickup("丙", "C", "CC2"),
+        ("乙", "X"): pickup("乙", "X", "CX1"),
+    }
+
+    def read(op, reader, work, order, citable=True):
+        return s.orals.register_reading(op, holds[(reader, work)], order, citable)
+
+    read("rd-甲-0", "甲", "A", 0)
+    read("rd-甲-1", "甲", "B", 1)
+    read("rd-甲-2", "甲", "C", 2)
+    read("rd-乙-0", "乙", "A", 0)
+    read("rd-乙-1", "乙", "B", 1)
+    read("rd-丙-0", "丙", "B", 0)
+    read("rd-丙-1", "丙", "C", 1)
+
+    # 只有真实成功取件才可以登记：仍在保留/过期/错人取件一律不算候选
+    s.ledger.register_ticket("oc-held", "丁", "A", 99, ["n"], ["f"], op_id="oc-th")
+    held = s.ledger.reserve("oc-held-rs", "v1", "CA3")
+    bad_held = s.orals.register_reading("oc-bad-held", held["hold_id"], 0, True)
+    assert bad_held["error"]["reason"] == "pickup_not_fulfilled"
+    s.ledger.release("oc-rel", held["hold_id"], "expired")
+    bad = s.orals.register_reading("oc-bad", held["hold_id"], 0, True)
+    assert bad["status"] == "rejected"
+    assert bad["error"]["reason"] == "pickup_not_fulfilled"
+    print("保留未取件 / 过期保留登记阅读 ->", bad["error"]["reason"])
+
+    s.orals.register_session("oc-s甲", "S甲", 1, 1)
+    s.orals.register_session("oc-s乙", "S乙", 1, 3)
+    s.orals.register_session("oc-s丙", "S丙", 1, 5)
+    for r, sess in (("甲", "S甲"), ("乙", "S乙"), ("丙", "S丙")):
+        s.orals.signup(f"oc-sg-{r}", r, sess)
+
+    # 场景 1
+    s.orals.issue_vouchers("oc-iv1", "v1")
+    p1 = s.exhibition.plan_exhibition("oc-p1", "P1", "v1", "A", "C", ["B"])
+    print("场景1 书链:", p1["chain"], "总开场费:", p1["total_fee"])
+    for e in p1["edges"]:
+        print(f"  {e['from_work']}->{e['to_work']} 讲述:{e['reader']}"
+              f" 场次:{e['session']} 席:{e['seat']}"
+              f" 取件:{e['from_hold']}->{e['to_hold']}")
+    assert p1["total_fee"] == 4
+    assert [e["reader"] for e in p1["edges"]] == ["乙", "甲"]
+
+    # 场景 2：补录乙 A、B 之间的真实 X 取件（不许公开）→ 乙无 AB 凭单
+    def retract(reader, work):
+        row = next(r for r in s.orals.get_readings(reader)
+                   if r["original_bib"] == work)
+        s.orals.retract_reading(f"oc-rt-{reader}-{work}-{row['reading_id']}",
+                                row["reading_id"])
+
+    retract("乙", "B")
+    read("rd-乙-X", "乙", "X", 1, citable=False)
+    read("rd-乙-B2", "乙", "B", 2)
+    s.orals.issue_vouchers("oc-iv2", "v1")
+    p2 = s.exhibition.plan_exhibition("oc-p2", "P2", "v1", "A", "C", ["B"])
+    print("场景2 书链:", p2["chain"], "总开场费:", p2["total_fee"])
+    for e in p2["edges"]:
+        print(f"  {e['from_work']}->{e['to_work']} 讲述:{e['reader']}"
+              f" 场次:{e['session']} 取件:{e['from_hold']}->{e['to_hold']}")
+    assert p2["total_fee"] == 6
+    assert [e["reader"] for e in p2["edges"]] == ["甲", "丙"]
+
+    # 场景 3：恢复原凭单，仅把丙场开场费改为 1
+    retract("乙", "X")
+    retract("乙", "B")
+    read("rd-乙-B3", "乙", "B", 1)
+    s.orals.issue_vouchers("oc-iv3", "v1")
+    s.orals.set_session_fee("oc-fee-丙", "S丙", 1)
+    p3 = s.exhibition.plan_exhibition("oc-p3", "P3", "v1", "A", "C", ["B"])
+    print("场景3 书链:", p3["chain"], "总开场费:", p3["total_fee"])
+    for e in p3["edges"]:
+        print(f"  {e['from_work']}->{e['to_work']} 讲述:{e['reader']}"
+              f" 场次:{e['session']} 取件:{e['from_hold']}->{e['to_hold']}")
+    assert p3["total_fee"] == 2
+    assert [e["reader"] for e in p3["edges"]] == ["甲", "丙"]
+
+    # 追查某位读者的真实相邻段
+    trail = s.orals.reader_trail("甲", "v1")
+    print("甲的段落:", json.dumps(trail["segments"], ensure_ascii=False))
+    assert [x["canonical"] for x in trail["segments"]] == ["A", "B", "C"]
+
+    # 归并：两个旧相邻段合成一段，旧版凭单仍能回答是哪两本
+    banner("目录归并：P、Q 合成一段，旧凭单仍答是哪两本")
+    m = LibrarySystem(":memory:")
+    mc = [
+        {"id": "CP", "book": "P", "branch": "n", "format": "f"},
+        {"id": "CQ", "book": "Q", "branch": "n", "format": "f"},
+    ]
+    m.catalog.submit_revision("va", ["P", "Q"], [], mc, op_id="mg-va")
+    m.ledger.register_ticket("TP", "丁", "P", 1, ["n"], ["f"], op_id="mg-tp")
+    hp = m.ledger.reserve("mg-rp", "va", "CP")
+    m.ledger.pickup("mg-pp", hp["hold_id"], "丁", "CP")
+    m.ledger.register_ticket("TQ", "丁", "Q", 2, ["n"], ["f"], op_id="mg-tq")
+    hq = m.ledger.reserve("mg-rq", "va", "CQ")
+    m.ledger.pickup("mg-pq", hq["hold_id"], "丁", "CQ")
+    m.orals.register_reading("mg-rdp", hp["hold_id"], 0, True)
+    m.orals.register_reading("mg-rdq", hq["hold_id"], 1, True)
+    m.orals.issue_vouchers("mg-iv-va", "va")
+    old = m.orals.get_vouchers("va")[0]
+    print("va 凭单 P->Q, 原始书目:", old["from_book"], "->", old["to_book"],
+          "取件:", old["from_hold"], "->", old["to_hold"])
+    m.catalog.submit_revision("vb", ["P", "Q"], [{"from": "Q", "to": "P"}], mc,
+                              op_id="mg-vb")
+    m.catalog.activate_revision("vb")
+    merged = m.orals.issue_vouchers("mg-iv-vb", "vb")
+    print("vb 归并后新凭单数:", len(merged["vouchers"]))
+    assert merged["vouchers"] == []
+    trail = m.orals.reader_trail("丁", "vb")
+    print("丁归并后的段:", json.dumps(trail["segments"], ensure_ascii=False))
+    assert len(trail["segments"]) == 1
+    old2 = m.orals.get_voucher(old["voucher_id"])
+    assert (old2["from_book"], old2["to_book"]) == ("P", "Q")
+    print("旧版凭单仍可回答:", old2["from_book"], "->", old2["to_book"])
+    m.close()
+    s.close()
+
+
 def main() -> None:
     # 干净起步，保证可重复运行
     for suffix in ("", "-wal", "-shm"):
@@ -280,6 +433,10 @@ def main() -> None:
     again_system.close()
 
     banner("全部断言通过")
+    demo_orals_and_exhibition()
+    print("\n" + "=" * 72)
+    print("口述凭单与三次排展全部断言通过")
+    print("=" * 72)
 
 
 if __name__ == "__main__":
