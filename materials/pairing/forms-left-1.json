@@ -1,0 +1,15 @@
+{
+  "file_id": "forms-left-1",
+  "writer_version": "left-form-w1",
+  "reader_version": "pairdesk-left-r1",
+  "rows": [
+    {"row_id": "reg-a1", "revision": 1,
+     "values": {"member_no": "a", "group_no": 1, "round": 1, "consent": "同意"}},
+    {"row_id": "reg-a2", "revision": 1,
+     "values": {"member_no": "a", "group_no": 1, "round": 1, "consent": "同意"}},
+    {"row_id": "reg-b2", "revision": 1,
+     "values": {"member_no": "b", "group_no": 1, "round": 1, "consent": "同意"}},
+    {"row_id": "reg-b1", "revision": 1,
+     "values": {"member_no": "b", "group_no": 1, "round": 1, "consent": "同意"}}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "file_id": "forms-left-x1",
+  "writer_version": "left-form-w1",
+  "reader_version": "pairdesk-left-r1",
+  "rows": [
+    {"row_id": "reg-x1", "revision": 1,
+     "values": {"member_no": "c", "group_no": 1, "round": 1, "consent": "同意"}},
+    {"row_id": "reg-x2", "revision": 1,
+     "values": {"member_no": "c", "group_no": 1, "round": 1, "consent": "同意"}}
+  ]
+}

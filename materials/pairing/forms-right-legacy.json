@@ -1,0 +1,9 @@
+{
+  "file_id": "forms-right-legacy",
+  "writer_version": "right-form-w0",
+  "reader_version": "pairdesk-right-r1",
+  "rows": [
+    {"row_id": "reg-b1", "revision": 1,
+     "values": {"member_no": 1, "group_no": 1, "round": 1}}
+  ]
+}

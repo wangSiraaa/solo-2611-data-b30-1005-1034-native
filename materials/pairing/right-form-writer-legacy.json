@@ -1,0 +1,23 @@
+{
+  "version": "right-form-w0",
+  "fields": [
+    {
+      "field_id": "member_no",
+      "name": "会员号",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "group_no",
+      "name": "展组号",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "round",
+      "name": "轮次",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    }
+  ]
+}

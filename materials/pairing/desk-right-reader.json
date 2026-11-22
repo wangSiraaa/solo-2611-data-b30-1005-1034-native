@@ -1,0 +1,30 @@
+{
+  "version": "pairdesk-right-r1",
+  "fields": [
+    {
+      "field_id": "member_no",
+      "name": "member_no",
+      "type": {"kind": "INT", "bits": 16},
+      "nullable": false
+    },
+    {
+      "field_id": "group_no",
+      "name": "group_no",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "round",
+      "name": "round",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "consent",
+      "name": "consent",
+      "type": {"kind": "TEXT"},
+      "nullable": false,
+      "default": "同意"
+    }
+  ]
+}

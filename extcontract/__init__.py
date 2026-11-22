@@ -8,6 +8,8 @@ Public entry points (see README for the full walkthrough):
     replace_field_type                    contract revisions
     adapt_rows / adapt_file_document      file -> reader-records/v1
     IngestionLibrary                      stateful, revision-aware ingestion
+    PairingDesk                           two-sided consent registration (报名台)
+    plan_distribution                     minimum-stamp issue planner (发放台)
 
 The supplied ``materials/745/reader_client.py`` is never imported or
 modified; its CLI consumes the ``reader-records/v1`` documents this package
@@ -36,6 +38,22 @@ from .adapter import (
     write_records,
 )
 from .ingest import IngestionLibrary, IngestResult, Receipt, RowState
+from .pairing import (
+    CONSENT_AGREE,
+    CONSENT_WITHDRAW,
+    PairingDesk,
+    PairingReport,
+    RegistrationView,
+    SideView,
+)
+from .distribution import (
+    DistributionPlan,
+    Stamp,
+    issue_file_documents,
+    plan_distribution,
+    verify_issued_files,
+    verify_rejoin,
+)
 from .errors import (
     ContractError,
     ConversionError,
@@ -72,6 +90,18 @@ __all__ = [
     "IngestResult",
     "Receipt",
     "RowState",
+    "CONSENT_AGREE",
+    "CONSENT_WITHDRAW",
+    "PairingDesk",
+    "PairingReport",
+    "RegistrationView",
+    "SideView",
+    "DistributionPlan",
+    "Stamp",
+    "issue_file_documents",
+    "plan_distribution",
+    "verify_issued_files",
+    "verify_rejoin",
     "ContractError",
     "ConversionError",
     "DomainError",

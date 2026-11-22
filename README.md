@@ -14,6 +14,11 @@ deliberately separated concerns:
    fixed reader contract, resolves row revisions, and accepts or rejects each file
    **atomically**.
 
+On top of those, a **joint-exhibition pairing service** (`PairingDesk` +
+`plan_distribution`) reuses the same ingestion entry point and file formats to
+join two branch libraries' consent forms without either branch ever holding the
+whole pairing roster — see section 4 below.
+
 The supplied `reader_client.py` is never imported or modified. It is exercised
 as a real subprocess against our output in the tests and demo.
 
@@ -44,6 +49,13 @@ Full mandated scenario (F-BAD / F-NEW, narrowed readers, INT16, DECIMAL, nullabl
 
 ```bash
 PYTHONPATH=. python3.11 examples/run_745_demo.py
+```
+
+Joint-exhibition pairing scenario (consent ingestion, default-consent trap,
+minimum-stamp issue, rejoin witness, withdrawal rule):
+
+```bash
+PYTHONPATH=. python3.11 examples/run_pairing_demo.py
 ```
 
 Tests (pytest):
@@ -265,6 +277,73 @@ No arbitrary type inference, no Arrow Union, no online database migration.
 
 ---
 
+## 4. Joint-exhibition pairing service (`extcontract/pairing.py` + `extcontract/distribution.py`)
+
+Two branch libraries each hold half of the roster; the joint operator never lets
+either branch hold the whole pairing. Contracts and form files live in
+`materials/pairing/`; the full story is `examples/run_pairing_demo.py`.
+
+### Registration desk (报名台)
+
+```python
+desk = PairingDesk(left_reader, right_reader)   # two frozen reader versions
+desk.ingest_left(left_writer, left_form_file)   # original ingestion entry point
+desk.ingest_right(right_writer, right_form_file)
+report = desk.report()      # why pairs stand / 缺另一方 / 待签
+relation = desk.sign_out()  # {group: [(left, right)]}, deduplicated
+```
+
+* One `IngestionLibrary` per side, each fixed to its own reader contract (the
+  frozen version). A registration (`row_id` = 报名号) has a row revision, a
+  branch member number, a group and a round on each side.
+* A side's current form stands only with an explicit `同意` that arrived
+  through a **real writer column**: a `同意` the reader filled in for a missing
+  column (`fill_default`, e.g. the legacy `right-form-w0` contract) is the
+  contract's default, not a personal signature — the form stays 待签. An
+  explicit `撤回` never stands.
+* The two directions merge only for the *same* registration with the same
+  round and the same group; the desk never splices the left end of one
+  registration onto the right end of another. A pair may be supported by
+  several registrations and leaves the relation only when its last support
+  is withdrawn.
+* Member numbers are keyed by the canonical reader-domain values (stable
+  `field_id` pairing; the right branch's INT8 member numbers widen to INT16).
+
+### Distribution desk (发放台)
+
+```python
+plan = plan_distribution(relation, left_slots=…, right_slots=…,
+                         total_stamps=…, prefer="left"|"right")
+left_doc, right_doc = issue_file_documents(plan, ...)
+witness = verify_issued_files(left_records, right_records, …, relation)
+```
+
+* Only two files leave the desk: `(组, 左成员, 章号)` for the left branch and
+  `(组, 右成员, 章号)` for the right branch, produced through real
+  writer/reader contracts. Joining them on `(group, stamp)` — and nothing
+  else — must rebuild exactly the approved relation: duplicate hits merge,
+  no pair is missed, and no unapproved pair is created by sharing a stamp.
+* One stamp covers a biclique (several left ends × several right ends) inside
+  one group; stamps never cross groups and one stamp never prints as two
+  numbers. Each person's card slots are counted across all their groups; the
+  site has a total stamp budget.
+* The planner carves the **fewest** stamps (exact search; envelope: ≤2
+  groups, ≤5+5 ends, ≤12 pairs per group). Ties may land the stamp records
+  mainly on either side (`prefer`), and either side's personal slot limits
+  may be tightened to trial an issue. When no assignment works, the plan
+  names the blocking pairs and the extra mispairs they would force (e.g.
+  `(a,1)` and `(b,2)` cannot share a stamp — it would add the unapproved
+  `(b,1)`), and the issued plan carries a rejoin witness.
+
+The brief's worked example is covered end to end: `{(a,1),(a,2),(b,2)}` needs
+two stamps (right end `2` carries both under `prefer="right"`, left end `a`
+under `prefer="left"`); one stamp per person is impossible at any stamp
+count; a one-stamp site budget is refused; once the right side re-signs
+`reg-b1` through the real consent column, all four pairs stand and a single
+stamp `{a,b}×{1,2}` covers them.
+
+---
+
 ## Templates for the mandated scenario
 
 `fixtures/bootstrap.json`, `fixtures/F-BAD.json`, `fixtures/F-NEW.json` are the
@@ -288,8 +367,13 @@ extcontract/
   compat.py     row-free whole-domain proof + adaptation plan + witnesses
   adapter.py    per-row validation + plan application -> reader-records/v1
   ingest.py     revision-aware, atomic, idempotent target state
+  pairing.py    two-sided consent registration desk (报名台)
+  distribution.py  minimum-stamp issue planner + rejoin witness (发放台)
   cli.py        compat / adapt / ingest commands
-examples/run_745_demo.py   end-to-end scenario against the real client
-fixtures/                  bootstrap, F-BAD, F-NEW documents
-tests/                     compat, adapter, ingest, fixtures, scale
+examples/run_745_demo.py      end-to-end 745 scenario against the real client
+examples/run_pairing_demo.py  end-to-end pairing/issue scenario (real client)
+fixtures/                     bootstrap, F-BAD, F-NEW documents
+materials/pairing/            pairing contracts + consent form files
+tests/                        compat, adapter, ingest, fixtures, scale,
+                              pairing, distribution, pairing e2e
 ```

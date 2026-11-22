@@ -1,0 +1,23 @@
+{
+  "version": "issue-right-w1",
+  "fields": [
+    {
+      "field_id": "group_no",
+      "name": "展组号",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "member_no",
+      "name": "会员号",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "stamp_no",
+      "name": "章号",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    }
+  ]
+}
