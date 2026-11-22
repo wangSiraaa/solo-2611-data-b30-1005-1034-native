@@ -1,0 +1,43 @@
+{
+  "height": 1,
+  "width": 3,
+  "ceiling": 2,
+  "tiles_v1": [
+    {"tile_id": "T", "revision": 1, "row": 0, "col": 0, "values": [[0, 0, 1]]}
+  ],
+  "tiles_v2_raised": [
+    {"tile_id": "T", "revision": 2, "row": 0, "col": 0, "values": [[0, 1, 1]]}
+  ],
+  "outlets": [],
+  "requests": [
+    {"id": "C1", "source_revision": 1, "opens": 0, "total_max": 100, "cell_max": []},
+    {"id": "C2", "source_revision": 2, "opens": 0, "total_max": 100, "cell_max": []}
+  ],
+  "mold": {
+    "blank_height": 2,
+    "rack_capacity": 2,
+    "tools": [
+      {
+        "id": "W",
+        "mount_fee": 0,
+        "edges": [
+          {"dr": 0, "dc": 0, "lift": 0},
+          {"dr": 0, "dc": 1, "lift": 0}
+        ]
+      },
+      {
+        "id": "P",
+        "mount_fee": 0,
+        "edges": [
+          {"dr": 0, "dc": 0, "lift": 0}
+        ]
+      }
+    ],
+    "strokes": [
+      {"id": "W-01", "tool_id": "W", "path": [[0, 0]], "labor_fee": 1, "sticker": "S-W"},
+      {"id": "P1", "tool_id": "P", "path": [[0, 0]], "labor_fee": 2, "sticker": null},
+      {"id": "P2", "tool_id": "P", "path": [[0, 1]], "labor_fee": 2, "sticker": null},
+      {"id": "P3", "tool_id": "P", "path": [[0, 2]], "labor_fee": 2, "sticker": null}
+    ]
+  }
+}

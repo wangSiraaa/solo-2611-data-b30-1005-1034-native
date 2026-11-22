@@ -1,0 +1,39 @@
+{
+  "height": 1,
+  "width": 3,
+  "ceiling": 2,
+  "tiles": [
+    {"tile_id": "T", "revision": 1, "row": 0, "col": 0, "values": [[1, 1, 1]]}
+  ],
+  "outlets": [],
+  "requests": [
+    {"id": "E1", "source_revision": 1, "opens": 0, "total_max": 100, "cell_max": []}
+  ],
+  "mold": {
+    "blank_height": 2,
+    "rack_capacity": 2,
+    "comment": "Z has two edges at the SAME offset (lifts 0 and 2): at holder col 0 cell 0 is grazed by both, so the lowest edge decides the cut.",
+    "tools": [
+      {
+        "id": "Z",
+        "mount_fee": 0,
+        "edges": [
+          {"dr": 0, "dc": 0, "lift": 0},
+          {"dr": 0, "dc": 0, "lift": 2},
+          {"dr": 0, "dc": 1, "lift": 0}
+        ]
+      },
+      {
+        "id": "P",
+        "mount_fee": 0,
+        "edges": [
+          {"dr": 0, "dc": 0, "lift": 0}
+        ]
+      }
+    ],
+    "strokes": [
+      {"id": "Z-0", "tool_id": "Z", "path": [[0, 0]], "labor_fee": 1, "sticker": "S-Z"},
+      {"id": "P3", "tool_id": "P", "path": [[0, 2]], "labor_fee": 2, "sticker": null}
+    ]
+  }
+}
