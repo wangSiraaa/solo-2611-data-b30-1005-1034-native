@@ -31,6 +31,46 @@ MAX_BUYERS_PER_AUCTION = 5
 MAX_OPEN_AUCTIONS = 3  # total auctions in this synthetic deployment
 
 
+def normalize_charity(charity: Any, qty: int) -> list[dict[str, Any]]:
+    """Validate per-unit charity registrations given at bid time.
+
+    ``charity`` is a list whose i-th entry describes the lot's (i+1)-th unit:
+    the non-donation rebate valuation (``rebate_cents``) and the foundations
+    allowed to use that unit's donation (``allow``).  Missing trailing units
+    default to a zero rebate with no permissions.
+    """
+    if charity is None:
+        return []
+    if not isinstance(charity, list):
+        raise DomainError("charity must be a list of per-unit registrations")
+    if len(charity) > qty:
+        raise DomainError(
+            f"charity registrations ({len(charity)}) exceed bid qty ({qty})"
+        )
+    normalized = []
+    for unit_index, entry in enumerate(charity, start=1):
+        if not isinstance(entry, dict):
+            raise DomainError(f"charity entry for unit {unit_index} must be an object")
+        rebate = require_int(
+            entry.get("rebate_cents"), f"charity[{unit_index}].rebate_cents", minimum=0
+        )
+        allow = entry.get("allow", [])
+        if not isinstance(allow, list) or any(
+            not isinstance(f, str) or not f.strip() for f in allow
+        ):
+            raise DomainError(
+                f"charity[{unit_index}].allow must be a list of foundation names"
+            )
+        normalized.append(
+            {
+                "unit_index": unit_index,
+                "rebate_cents": rebate,
+                "allow": sorted(set(allow)),
+            }
+        )
+    return normalized
+
+
 class AuctionService:
     def __init__(self, db, margin: MarginLedger):
         self.db = db
@@ -123,6 +163,7 @@ class AuctionService:
         qty: int,
         unit_price_cents: int,
         hold_id: str,
+        charity: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         require_nonempty(request_id, "request_id")
         require_nonempty(bid_id, "bid_id")
@@ -131,9 +172,10 @@ class AuctionService:
         require_nonempty(hold_id, "hold_id")
         require_int(qty, "qty", minimum=1)
         require_int(unit_price_cents, "unit_price_cents", minimum=1)
+        charity_units = normalize_charity(charity, qty)
         payload = {"bid_id": bid_id, "auction_id": auction_id, "buyer": buyer,
                    "qty": qty, "unit_price_cents": unit_price_cents,
-                   "hold_id": hold_id}
+                   "hold_id": hold_id, "charity": charity_units}
         operation = "auction.place_bid"
         required = qty * unit_price_cents
 
@@ -176,6 +218,7 @@ class AuctionService:
                     f"bid rejected: {bid_id} already exists, or buyer {buyer} "
                     "already has an active bid, or the hold already backs one"
                 ) from exc
+            self._store_charity(conn, bid_id, charity_units, at)
             conn.execute(
                 "INSERT INTO bid_events(request_id, bid_id, auction_id, buyer, action, "
                 "qty, unit_price_cents, revision, hold_id, at) "
@@ -194,10 +237,23 @@ class AuctionService:
                 "status": "ACTIVE",
                 "hold_id": hold_id,
                 "required_cents": required,
+                "charity": charity_units,
                 "at": at,
             }
             put_receipt(conn, request_id, operation, payload, response)
         return response
+
+    @staticmethod
+    def _store_charity(conn, bid_id: str, charity_units: list[dict], at: str) -> None:
+        """(Re)write a bid's per-unit charity registrations atomically."""
+        conn.execute("DELETE FROM bid_charity WHERE bid_id=?", (bid_id,))
+        for unit in charity_units:
+            conn.execute(
+                "INSERT INTO bid_charity(bid_id, unit_index, rebate_cents, "
+                "allow_json, created_at) VALUES (?, ?, ?, ?, ?)",
+                (bid_id, unit["unit_index"], unit["rebate_cents"],
+                 json.dumps(unit["allow"], ensure_ascii=False), at),
+            )
 
     def revise_bid(
         self,
@@ -207,13 +263,16 @@ class AuctionService:
         qty: int,
         unit_price_cents: int,
         new_hold_id: str,
+        charity: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Replace a live bid wholesale with a higher revision.
 
         The replacement hold must already exist and cover the new notional.
         The old hold is released **in the same transaction** that installs the
         new bid/credential: there is no window where the old collateral is
-        gone but the old bid could still be settled.
+        gone but the old bid could still be settled.  When ``charity`` is
+        given, the per-unit charity registrations are replaced in the same
+        commit; otherwise the existing registrations carry over.
         """
         require_nonempty(request_id, "request_id")
         require_nonempty(bid_id, "bid_id")
@@ -221,8 +280,10 @@ class AuctionService:
         require_nonempty(new_hold_id, "new_hold_id")
         require_int(qty, "qty", minimum=1)
         require_int(unit_price_cents, "unit_price_cents", minimum=1)
+        charity_units = normalize_charity(charity, qty) if charity is not None else None
         payload = {"bid_id": bid_id, "buyer": buyer, "qty": qty,
-                   "unit_price_cents": unit_price_cents, "new_hold_id": new_hold_id}
+                   "unit_price_cents": unit_price_cents, "new_hold_id": new_hold_id,
+                   "charity": charity_units}
         operation = "auction.revise_bid"
         required = qty * unit_price_cents
 
@@ -262,6 +323,8 @@ class AuctionService:
             self.margin.release_in_tx(
                 conn, old_hold_id, f"{request_id}:release", auction_id=bid["auction_id"]
             )
+            if charity_units is not None:
+                self._store_charity(conn, bid_id, charity_units, at)
             conn.execute(
                 "INSERT INTO bid_events(request_id, bid_id, auction_id, buyer, action, "
                 "qty, unit_price_cents, revision, hold_id, at) "
@@ -281,6 +344,7 @@ class AuctionService:
                 "hold_id": new_hold_id,
                 "replaced_hold_id": old_hold_id,
                 "required_cents": required,
+                "charity": charity_units,
                 "at": at,
             }
             put_receipt(conn, request_id, operation, payload, response)
@@ -371,8 +435,9 @@ class AuctionService:
                 self.margin.verify_credential(
                     conn, bid["hold_id"], bid["buyer"], auction_id, required
                 )
+            charity_regs = self._load_charity(conn, [b["bid_id"] for b in bids])
 
-            snapshot = self._compute_result(auction, bids)
+            snapshot = self._compute_result(auction, bids, charity_regs)
             at = now_utc()
             conn.execute(
                 "UPDATE auctions SET status='FROZEN', frozen_at=? WHERE auction_id=?",
@@ -389,8 +454,32 @@ class AuctionService:
         return response
 
     @staticmethod
-    def _compute_result(auction: dict, bids: list[dict]) -> dict[str, Any]:
+    def _load_charity(conn, bid_ids: list[str]) -> dict[str, dict[int, dict]]:
+        """Per-bid charity registrations, keyed by bid_id then unit_index."""
+        regs: dict[str, dict[int, dict]] = {bid_id: {} for bid_id in bid_ids}
+        if not bid_ids:
+            return regs
+        marks = ",".join("?" for _ in bid_ids)
+        for row in conn.execute(
+            f"SELECT bid_id, unit_index, rebate_cents, allow_json FROM bid_charity "
+            f"WHERE bid_id IN ({marks}) ORDER BY bid_id, unit_index",
+            bid_ids,
+        ):
+            regs[row["bid_id"]][row["unit_index"]] = {
+                "unit_index": row["unit_index"],
+                "rebate_cents": row["rebate_cents"],
+                "allow": json.loads(row["allow_json"]),
+            }
+        return regs
+
+    @staticmethod
+    def _compute_result(
+        auction: dict,
+        bids: list[dict],
+        charity_regs: dict[str, dict[int, dict]] | None = None,
+    ) -> dict[str, Any]:
         """One deterministic pass: price desc, bid_id asc, partial last fill."""
+        charity_regs = charity_regs or {}
         remaining = auction["units"]
         allocations: list[dict] = []
         clearing_price: int | None = None
@@ -402,6 +491,17 @@ class AuctionService:
                 remaining -= allocated
             if allocated > 0:
                 clearing_price = bid["unit_price_cents"]
+            regs = charity_regs.get(bid["bid_id"], {})
+            # The bid's registered charity terms travel with the frozen
+            # result, so receipts are derived from immutable data.  Units
+            # without a registration default to zero rebate, no permissions.
+            charity = [
+                regs.get(
+                    unit_index,
+                    {"unit_index": unit_index, "rebate_cents": 0, "allow": []},
+                )
+                for unit_index in range(1, bid["qty"] + 1)
+            ]
             allocations.append(
                 {
                     "bid_id": bid["bid_id"],
@@ -411,6 +511,7 @@ class AuctionService:
                     "allocated_qty": allocated,
                     "hold_id": bid["hold_id"],
                     "revision": bid["revision"],
+                    "charity": charity,
                 }
             )
 

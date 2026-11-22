@@ -8,5 +8,12 @@ from .db import Database
 from .margin import MarginLedger
 from .auction import AuctionService
 from .clearing import ClearingService
+from .charity import CharityService
 
-__all__ = ["Database", "MarginLedger", "AuctionService", "ClearingService"]
+__all__ = [
+    "Database",
+    "MarginLedger",
+    "AuctionService",
+    "ClearingService",
+    "CharityService",
+]

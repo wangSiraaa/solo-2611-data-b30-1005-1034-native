@@ -35,6 +35,23 @@
 | 结算续跑 | 每个 hold 的仓库操作使用确定性 `request_id`（`settle:<auction>:<bid>`），崩溃后任意调用者可按实际状态续做，不会双扣 |
 | 待决状态 | `settlements.status` = `FROZEN → CLEARING → CLEARED`，部分结算可见且可继续 |
 
+## 公益配捐（慈善匹配）
+
+拍卖、保证金与常规清算照旧；配捐是清算之后的附加层，金额仍为整数分。
+
+**捐赠收据**
+
+- 买家报名时可为同一标的的第 1、2、… 件分别登记**回赠估值**（非捐部分）与**许可**（哪些基金会可使用该件捐额）；改标可在同一事务里整体替换登记。
+- 截止时慈善登记随冻结结果一并写入 `settlements.allocations_json`，之后不可变。
+- 只有**已清算（CLEARED）**的实际获配单位才开票：每件一张具名收据，捐额 = `max(0, 统一成交价 − 回赠估值)`，按件先扣、不足零按零计并保留来由（`rebate_covers_price`）；部分成交只认前若干件。收据保留成交单价、实扣捐额、捐赠者归属与许可。
+- 排名已定、尚未实扣的票只可**预查**（`preview_receipts`），不能进入请款。
+
+**邀约与请款**
+
+- 基金会本轮邀约写明最低捐额、最低不同捐赠者人数、达标后愿加付的固定整数分；同一捐赠者的多张票只算一个人数。
+- 收据金额不可切开，也只能正式承诺给一家；试算（`plan_round`，只读）在**仍 OPEN 的邀约**与**仍 ISSUED 的真收据**上求**配得总额最多、同分占用收据最少**的最优安排（精确分支限界；上限 4 家基金会、20 张收据）。
+- 确认（`confirm_round`）在一个事务里核验许可、门槛与可用性后落账：两个经办人同时要同一张真收据只可确认一份（`ux_claim_receipt_once` 兜底）；已确认的收据在同场换次试算中不再出现。每家清单均可查回原捐赠者。
+
 ## 目录
 
 ```
@@ -42,19 +59,23 @@ sealed_auction/
   db.py          SQLite schema、BEGIN IMMEDIATE 事务
   core.py        错误、UTC、幂等回执
   margin.py      保证金仓：入金/冻结/解冻/上限扣款/余额/凭据核验
-  auction.py     拍卖服务：投标/修订/撤销/冻结结标/结算/复读/解释
+  auction.py     拍卖服务：投标(含慈善登记)/修订/撤销/冻结结标/结算/复读/解释
   clearing.py    跨模块编排、对账单
+  charity.py     公益配捐：收据预查/开具、邀约登记、试算、确认请款、轮次报告
   reconcile.py   仅从原始事件独立重算账户与获配
-examples/run_demo.py   从入金到结标清算的复跑入口
-tests/test_scenarios.py 16 个场景测试
+examples/run_demo.py          从入金到结标清算的复跑入口
+examples/run_charity_demo.py  配捐场景复跑入口
+tests/test_scenarios.py  16 个场景测试
+tests/test_charity.py    15 个配捐场景测试
 ```
 
 ## 复跑
 
 ```bash
-python3 -m unittest tests.test_scenarios -v
+python3 -m unittest tests.test_scenarios tests.test_charity -v
 python3 -m examples.run_demo                       # 临时库
 python3 -m examples.run_demo --db demo.sqlite3     # 持久库；多次运行自动命名空间隔离
+python3 -m examples.run_charity_demo               # 配捐演示（临时库）
 ```
 
 演示逐步打印：
@@ -85,3 +106,17 @@ python3 -m examples.run_demo --db demo.sqlite3     # 持久库；多次运行自
 - 空场无成交价；
 - 限额与“每买家一个有效 bid”；
 - 对账能从原始事件发现被删除的扣款。
+
+`python3 -m unittest tests.test_charity` 覆盖：
+
+- 统一价 6、回赠 2/4 时收据为 4 和 2；F（6 分/两人/配 9）拿走两张得 9；
+- 独立场 B 改报 5 后收据变 3 和 1，F 无法请款，两张都给 G 配 6；
+- 原收据下 G 配额提为 10，只交 A 一张给 G 得 10，B 留用（同分少占收据）；
+- 同一捐赠者两张票凑足金额但人数不足，邀约不可达标；
+- 部分成交只为实际获配的前若干件开票；
+- 排名已定未实扣只可预查，清算后才开具真收据；
+- 预查后他席先占收据：过期方案被拒，换次试算不再计入已确认收据；
+- 两经办人争同一张真收据只有一份请款确认；
+- 零捐额收据保留来由且不可请款；许可之外基金会拿不到收据；
+- 收据不可切开、不可重复承诺；开具与确认均可幂等重放；
+- 每轮最多四家基金会、二十张收据的限额。

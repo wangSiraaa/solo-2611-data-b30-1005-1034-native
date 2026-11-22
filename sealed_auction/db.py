@@ -107,6 +107,77 @@ CREATE TABLE IF NOT EXISTS settlements (
     created_at             TEXT NOT NULL,
     cleared_at             TEXT
 );
+
+-- Charity registration captured at bid time: for the lot's 1st, 2nd, ... unit
+-- the buyer records the non-donation rebate valuation and which foundations
+-- may use that unit's donation.  Replaced wholesale on bid revision.
+CREATE TABLE IF NOT EXISTS bid_charity (
+    bid_id            TEXT NOT NULL REFERENCES bids(bid_id),
+    unit_index        INTEGER NOT NULL CHECK (unit_index >= 1),
+    rebate_cents      INTEGER NOT NULL CHECK (rebate_cents >= 0),
+    allow_json        TEXT NOT NULL,
+    created_at        TEXT NOT NULL,
+    PRIMARY KEY (bid_id, unit_index)
+);
+
+-- One named receipt per actually allocated unit, issued only after the
+-- auction is CLEARED (donations recognise settled funds only).
+CREATE TABLE IF NOT EXISTS donation_receipts (
+    receipt_id        TEXT PRIMARY KEY,
+    auction_id        TEXT NOT NULL,
+    bid_id            TEXT NOT NULL,
+    donor             TEXT NOT NULL,
+    unit_index        INTEGER NOT NULL,
+    unit_price_cents  INTEGER NOT NULL,
+    rebate_cents      INTEGER NOT NULL,
+    donation_cents    INTEGER NOT NULL CHECK (donation_cents >= 0),
+    zero_reason       TEXT,
+    allow_json        TEXT NOT NULL,
+    status            TEXT NOT NULL CHECK (status IN ('ISSUED','COMMITTED')),
+    committed_to      TEXT,
+    claim_id          TEXT,
+    created_at        TEXT NOT NULL,
+    committed_at      TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_receipt_unit
+    ON donation_receipts(auction_id, bid_id, unit_index);
+CREATE INDEX IF NOT EXISTS idx_receipts_status ON donation_receipts(status);
+
+CREATE TABLE IF NOT EXISTS match_invitations (
+    invitation_id       TEXT PRIMARY KEY,
+    round_id            TEXT NOT NULL,
+    foundation          TEXT NOT NULL,
+    min_donation_cents  INTEGER NOT NULL CHECK (min_donation_cents >= 0),
+    min_donors          INTEGER NOT NULL CHECK (min_donors >= 1),
+    match_cents         INTEGER NOT NULL CHECK (match_cents >= 1),
+    status              TEXT NOT NULL CHECK (status IN ('OPEN','CLAIMED')),
+    created_at          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_invitations_round ON match_invitations(round_id);
+
+CREATE TABLE IF NOT EXISTS match_claims (
+    claim_id          TEXT PRIMARY KEY,
+    round_id          TEXT NOT NULL,
+    invitation_id     TEXT NOT NULL REFERENCES match_invitations(invitation_id),
+    foundation        TEXT NOT NULL,
+    matched_cents     INTEGER NOT NULL,
+    donation_cents    INTEGER NOT NULL,
+    donor_count       INTEGER NOT NULL,
+    created_at        TEXT NOT NULL
+);
+-- An invitation enters at most one confirmed claim.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_claim_invitation
+    ON match_claims(invitation_id);
+
+CREATE TABLE IF NOT EXISTS claim_receipts (
+    claim_id          TEXT NOT NULL REFERENCES match_claims(claim_id),
+    receipt_id        TEXT NOT NULL REFERENCES donation_receipts(receipt_id),
+    PRIMARY KEY (claim_id, receipt_id)
+);
+-- Last line of defence: two agents racing the same real receipt can confirm
+-- only one claim; a committed receipt is never recounted by a later trial.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_claim_receipt_once
+    ON claim_receipts(receipt_id);
 """
 
 
