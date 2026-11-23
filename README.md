@@ -265,6 +265,86 @@ No arbitrary type inference, no Arrow Union, no online database migration.
 
 ---
 
+## 4. Domino rubbings and exhibition tracks (`extcontract.dominoes`)
+
+The domino package keeps evidence, physical reconstruction, and exhibition planning
+separate. A rubbing file contains canonical rows with `tile_id`, `rubbing_id`,
+`revision`, written-end candidate ids, and an observed `rivet_side` (`"left"`,
+`"right"`, or `null`).
+
+### Evidence and revisions
+
+```python
+from extcontract import FixedRubbingContract, RubbingLibrary, reconstruct_all
+
+contract = FixedRubbingContract("dw1", "dr1", ("A", "B", "C", "D"))
+library = RubbingLibrary(contract)
+library.ingest({
+    "file_id": "scan-1",
+    "writer_version": "dw1",
+    "reader_version": "dr1",
+    "rubbings": [{
+        "tile_id": "T3", "rubbing_id": "T3-r1", "revision": 1,
+        "left_marks": ["B"], "right_marks": ["D"], "rivet_side": "left",
+    }],
+})
+```
+
+* `null` on a written end means the end was not observed; it does **not** create a
+  wildcard mark. During reconstruction it contributes no evidence, represented as
+  the whole fixed dictionary only for set intersection.
+* A missing `rivet_side` remains `None` in canonical state. `publish()` may display
+  the old-reader default `"left"`, and its source is marked
+  `"usable_for_orientation": false`; restoration never uses that default.
+* Files are atomic. Same-revision conflicts, dictionary violations, and attempts to
+  move a rubbing to another tile reject the entire file. Higher revisions supersede;
+  lower revisions are validated and then ignored. Separate `RubbingLibrary`
+  instances are independent frozen hypotheses.
+
+### Whole-tile reconstruction
+
+Each rubbing is turned as a whole, so its left/right observations flip together.
+For a known rivet side, `(rivet-end, other-end)` is fixed; an unknown rivet keeps
+both whole-tile orientations. `reconstruct_all` intersects the directed physical
+pairs of all witnesses for a tile.
+
+```python
+report = reconstruct_all(library.freeze(), contract.dictionary)["T3"]
+report.directed_pairs          # possible (rivet_end, other_end) pairs
+report.unordered_pairs         # end pairs after orientation is forgotten
+report.empty                   # incompatible witnesses: keep for review
+report.exhibit_ready           # true only when one unordered pair remains
+```
+
+A Cartesian product of marginal candidates is not accepted as a list of real tiles.
+Two ambiguous rubbings can intersect to one unordered pair even though neither alone
+identifies the tile. Ambiguous tiles and empty intersections cannot be substituted by
+a same-marked tile.
+
+### Exact track and bridge planning
+
+`TileEdge` preserves the physical tile id; two same-marked tiles remain distinct and
+each must be used once. A `Bridge` has fixed ends and is placed only if borrowed.
+
+```python
+from extcontract import TileEdge, Bridge, minimize_tracks, minimum_bridges_for_tracks
+
+real = (TileEdge("T1", "A", "B"), TileEdge("T2", "B", "C"), TileEdge("T3", "B", "D"))
+bridge = (Bridge("Q", "C", "D"),)
+
+minimize_tracks(real, bridge, max_borrowed_bridges=0)       # 2 tracks, 0 bridges
+minimize_tracks(real, bridge, max_borrowed_bridges=1)       # 1 track, 1 bridge
+minimum_bridges_for_tracks(real, bridge, available_tracks=1)
+```
+
+Forbidden named pairs are passed as `forbidden_adjacent={frozenset(("X", "Y"))}`.
+The exhaustive planner checks mark adjacency, forbidden adjacency, bridge use,
+physical-id multiplicity, connected components, and odd-degree parity. It returns
+each track's real tile/bridge order, direction, and any evidenced rivet side. The
+enforced envelope is 15 real tiles and 5 bridges.
+
+---
+
 ## Templates for the mandated scenario
 
 `fixtures/bootstrap.json`, `fixtures/F-BAD.json`, `fixtures/F-NEW.json` are the
