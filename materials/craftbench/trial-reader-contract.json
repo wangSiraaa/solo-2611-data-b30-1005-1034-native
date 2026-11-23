@@ -1,0 +1,55 @@
+{
+  "version": "tr1",
+  "fields": [
+    {
+      "field_id": "style_id",
+      "name": "style_id",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    },
+    {
+      "field_id": "piece_id",
+      "name": "piece_id",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    },
+    {
+      "field_id": "sample_id",
+      "name": "sample_id",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    },
+    {
+      "field_id": "direction",
+      "name": "direction",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    },
+    {
+      "field_id": "green_dim",
+      "name": "green_dim",
+      "type": {"kind": "DECIMAL", "precision": 12, "scale": 4},
+      "nullable": false
+    },
+    {
+      "field_id": "observed_lo",
+      "name": "observed_lo",
+      "type": {"kind": "DECIMAL", "precision": 12, "scale": 4},
+      "nullable": true,
+      "default": "0"
+    },
+    {
+      "field_id": "observed_hi",
+      "name": "observed_hi",
+      "type": {"kind": "DECIMAL", "precision": 12, "scale": 4},
+      "nullable": true,
+      "default": "0"
+    },
+    {
+      "field_id": "signed",
+      "name": "signed",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    }
+  ]
+}

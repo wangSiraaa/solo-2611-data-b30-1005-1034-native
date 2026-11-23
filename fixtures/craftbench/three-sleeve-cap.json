@@ -1,0 +1,67 @@
+{
+  "scenario_id": "three-sleeve-cap",
+  "styles": [
+    {
+      "style_id": "U",
+      "allow_rotation": true,
+      "candidate_ratios": [["1", "1"], ["4/5", "4/5"]],
+      "pieces": [
+        {
+          "piece_id": "p1",
+          "green": {
+            "outer_w": "2", "outer_d": "2",
+            "inner_w": "1", "inner_d": "1"
+          },
+          "proofs": [
+            {
+              "proof_id": "p1|s1|w",
+              "sample_id": "s1",
+              "direction": "w",
+              "green_dim": "2",
+              "observed": ["8/5", "2"],
+              "signed": true,
+              "revision": 1
+            }
+          ]
+        },
+        {
+          "piece_id": "p2",
+          "green": {
+            "outer_w": "5", "outer_d": "5",
+            "inner_w": "4", "inner_d": "4"
+          },
+          "proofs": []
+        },
+        {
+          "piece_id": "p3",
+          "green": {
+            "outer_w": "8", "outer_d": "8",
+            "inner_w": "6", "inner_d": "6"
+          },
+          "proofs": []
+        }
+      ]
+    }
+  ],
+  "racks": [
+    {
+      "rack_id": "RA",
+      "style_id": "U",
+      "seats": 3,
+      "allowed_pieces": ["p1", "p2", "p3"],
+      "fee": 3
+    },
+    {
+      "rack_id": "RB",
+      "style_id": "U",
+      "seats": 2,
+      "allowed_pieces": ["p2", "p3"],
+      "fee": 1
+    }
+  ],
+  "objective": {
+    "mode": "min_fee",
+    "box_cap": 1,
+    "fee_budget": null
+  }
+}

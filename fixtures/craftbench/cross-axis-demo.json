@@ -1,0 +1,96 @@
+{
+  "scenario_id": "cross-axis-demo",
+  "styles": [
+    {
+      "style_id": "T",
+      "allow_rotation": false,
+      "candidate_ratios": [
+        ["1", "1/2"],
+        ["1/2", "1"]
+      ],
+      "pieces": [
+        {
+          "piece_id": "inner",
+          "green": {
+            "outer_w": "2",
+            "outer_d": "2",
+            "inner_w": "1",
+            "inner_d": "1"
+          },
+          "proofs": [
+            {
+              "proof_id": "inner|a|w",
+              "sample_id": "a",
+              "direction": "w",
+              "green_dim": "2",
+              "observed": ["1", "2"],
+              "signed": true,
+              "revision": 1
+            },
+            {
+              "proof_id": "inner|a|d",
+              "sample_id": "a",
+              "direction": "d",
+              "green_dim": "2",
+              "observed": ["1", "2"],
+              "signed": true,
+              "revision": 1
+            }
+          ]
+        },
+        {
+          "piece_id": "outer",
+          "green": {
+            "outer_w": "8",
+            "outer_d": "8",
+            "inner_w": "4",
+            "inner_d": "4"
+          },
+          "proofs": [
+            {
+              "proof_id": "outer|bw|w",
+              "sample_id": "bw",
+              "direction": "w",
+              "green_dim": "4",
+              "observed": ["2", "4"],
+              "signed": true,
+              "revision": 1
+            },
+            {
+              "proof_id": "outer|bd|d",
+              "sample_id": "bd",
+              "direction": "d",
+              "green_dim": "4",
+              "observed": ["2", "4"],
+              "signed": true,
+              "revision": 1
+            },
+            {
+              "proof_id": "outer|bmiss|d",
+              "sample_id": "bmiss",
+              "direction": "d",
+              "green_dim": "4",
+              "observed": null,
+              "signed": false,
+              "revision": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "racks": [
+    {
+      "rack_id": "RT",
+      "style_id": "T",
+      "seats": 2,
+      "allowed_pieces": ["inner", "outer"],
+      "fee": 1
+    }
+  ],
+  "objective": {
+    "mode": "min_boxes",
+    "box_cap": null,
+    "fee_budget": null
+  }
+}

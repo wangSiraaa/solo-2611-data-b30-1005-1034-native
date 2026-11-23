@@ -46,6 +46,18 @@ Full mandated scenario (F-BAD / F-NEW, narrowed readers, INT16, DECIMAL, nullabl
 PYTHONPATH=. python3.11 examples/run_745_demo.py
 ```
 
+## craftbench — 陶套筒烧前工艺凭单与装窑/装箱工单
+
+在同一套精确合同/摄入工具之上，`craftbench/` 把试烧来单接到工艺台：按签读
+闭区间筛选候选成形比例对（横纵共同作用于整组、未签读占位不约束、全组矛盾退
+校），再穷举装窑分炉与套叠森林，给出对所有允许炉况都合格的固定套法和具名工
+单。见 `materials/craftbench/README.md`，端到端演示：
+
+```bash
+PYTHONPATH=. python3.11 examples/run_craft_demo.py
+PYTHONPATH=. python3.11 tests/run_tests.py   # 无 pytest 时的内置 runner
+```
+
 Tests (pytest):
 
 ```bash

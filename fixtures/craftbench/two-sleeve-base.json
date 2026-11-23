@@ -1,0 +1,48 @@
+{
+  "scenario_id": "two-sleeve-base",
+  "styles": [
+    {
+      "style_id": "S",
+      "allow_rotation": false,
+      "candidate_ratios": [["1", "1"], ["4/5", "4/5"]],
+      "pieces": [
+        {
+          "piece_id": "small",
+          "green": {
+            "outer_w": "5", "outer_d": "5",
+            "inner_w": "1", "inner_d": "1"
+          },
+          "proofs": [
+            {
+              "proof_id": "small|sm1|w",
+              "sample_id": "sm1",
+              "direction": "w",
+              "green_dim": "5",
+              "observed": ["4", "5"],
+              "signed": true,
+              "revision": 1
+            }
+          ]
+        },
+        {
+          "piece_id": "large",
+          "green": {
+            "outer_w": "8", "outer_d": "8",
+            "inner_w": "6", "inner_d": "6"
+          },
+          "proofs": []
+        }
+      ]
+    }
+  ],
+  "racks": [
+    {
+      "rack_id": "R1",
+      "style_id": "S",
+      "seats": 2,
+      "allowed_pieces": ["small", "large"],
+      "fee": 2
+    }
+  ],
+  "objective": {"mode": "min_boxes", "box_cap": null, "fee_budget": null}
+}

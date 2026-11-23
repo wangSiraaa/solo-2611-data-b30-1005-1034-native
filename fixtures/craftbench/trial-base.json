@@ -1,0 +1,21 @@
+{
+  "file_id": "trial-base",
+  "writer_version": "tw1",
+  "reader_version": "tr1",
+  "rows": [
+    {
+      "row_id": "small|sm1|w",
+      "revision": 1,
+      "values": {
+        "style_id": "S",
+        "piece_id": "small",
+        "sample_id": "sm1",
+        "direction": "w",
+        "green_dim": "5",
+        "observed_lo": "4",
+        "observed_hi": "5",
+        "signed": 1
+      }
+    }
+  ]
+}
