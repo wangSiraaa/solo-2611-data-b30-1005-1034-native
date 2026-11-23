@@ -1,0 +1,55 @@
+{
+  "file_id": "aud-wu-59",
+  "writer_version": "w-choir",
+  "reader_version": "r-choir",
+  "rows": [
+    {
+      "row_id": "w1",
+      "revision": 1,
+      "values": {
+        "audition": "A-WU-5",
+        "singer": "戊",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "w2",
+      "revision": 1,
+      "values": {
+        "audition": "A-WU-5",
+        "singer": "戊",
+        "seq": 1,
+        "pitch": null,
+        "kind": "end",
+        "ending": "戊签字"
+      }
+    },
+    {
+      "row_id": "w3",
+      "revision": 1,
+      "values": {
+        "audition": "A-WU-9",
+        "singer": "戊",
+        "seq": 0,
+        "pitch": 9,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "w4",
+      "revision": 1,
+      "values": {
+        "audition": "A-WU-9",
+        "singer": "戊",
+        "seq": 1,
+        "pitch": null,
+        "kind": "end",
+        "ending": "戊签字"
+      }
+    }
+  ]
+}

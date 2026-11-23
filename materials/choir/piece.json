@@ -1,0 +1,17 @@
+{
+  "piece_id": "独唱试演曲",
+  "title": "独唱两句试演",
+  "voices": [
+    {
+      "voice_id": "V-SOLO",
+      "name": "独唱",
+      "phrases": [
+        {"phrase_id": "P1", "low": 5, "high": 5, "order": 0, "rest_after": true},
+        {"phrase_id": "P2", "low": 8, "high": 8, "order": 1, "rest_after": false}
+      ]
+    }
+  ],
+  "overpasses": [
+    {"overpass_id": "O1", "between": ["P1", "P2"], "pitch": 7}
+  ]
+}

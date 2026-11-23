@@ -1,0 +1,175 @@
+{
+  "file_id": "aud-original",
+  "writer_version": "w-choir",
+  "reader_version": "r-choir",
+  "rows": [
+    {
+      "row_id": "a1",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-6",
+        "singer": "甲",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "a2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-6",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": 5,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "a3",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-6",
+        "singer": "甲",
+        "seq": 2,
+        "pitch": 6,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "a4",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-6",
+        "singer": "甲",
+        "seq": 3,
+        "pitch": null,
+        "kind": "end",
+        "ending": "甲签字"
+      }
+    },
+    {
+      "row_id": "b1",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-9",
+        "singer": "甲",
+        "seq": 0,
+        "pitch": 9,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "b2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-9",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": null,
+        "kind": "end",
+        "ending": "甲签字"
+      }
+    },
+    {
+      "row_id": "c1",
+      "revision": 1,
+      "values": {
+        "audition": "A-YI-8",
+        "singer": "乙",
+        "seq": 0,
+        "pitch": 8,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "c2",
+      "revision": 1,
+      "values": {
+        "audition": "A-YI-8",
+        "singer": "乙",
+        "seq": 1,
+        "pitch": null,
+        "kind": "end",
+        "ending": "乙签字"
+      }
+    },
+    {
+      "row_id": "d1",
+      "revision": 1,
+      "values": {
+        "audition": "A-BING-5-8",
+        "singer": "丙",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "d2",
+      "revision": 1,
+      "values": {
+        "audition": "A-BING-5-8",
+        "singer": "丙",
+        "seq": 1,
+        "pitch": 5,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "d3",
+      "revision": 1,
+      "values": {
+        "audition": "A-BING-5-8",
+        "singer": "丙",
+        "seq": 2,
+        "pitch": 6,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "d4",
+      "revision": 1,
+      "values": {
+        "audition": "A-BING-5-8",
+        "singer": "丙",
+        "seq": 3,
+        "pitch": 7,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "d5",
+      "revision": 1,
+      "values": {
+        "audition": "A-BING-5-8",
+        "singer": "丙",
+        "seq": 4,
+        "pitch": 8,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "d6",
+      "revision": 1,
+      "values": {
+        "audition": "A-BING-5-8",
+        "singer": "丙",
+        "seq": 5,
+        "pitch": null,
+        "kind": "end",
+        "ending": "丙签字"
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "file_id": "aud-ending-omitted",
+  "writer_version": "w-choir-noending",
+  "reader_version": "r-choir",
+  "rows": [
+    {
+      "row_id": "x1",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-DEFAULT",
+        "singer": "甲",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset"
+      }
+    },
+    {
+      "row_id": "x2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-DEFAULT",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": 6,
+        "kind": "sample"
+      }
+    },
+    {
+      "row_id": "x3",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-DEFAULT",
+        "singer": "甲",
+        "seq": 2,
+        "pitch": null,
+        "kind": "end"
+      }
+    }
+  ]
+}

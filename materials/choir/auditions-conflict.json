@@ -1,0 +1,55 @@
+{
+  "file_id": "aud-conflict",
+  "writer_version": "w-choir",
+  "reader_version": "r-choir",
+  "rows": [
+    {
+      "row_id": "k1",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-CONFLICT",
+        "singer": "甲",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "k2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-CONFLICT",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": 6,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "k2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-CONFLICT",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": 8,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "k3",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-CONFLICT",
+        "singer": "甲",
+        "seq": 2,
+        "pitch": null,
+        "kind": "end",
+        "ending": "甲签字"
+      }
+    }
+  ]
+}

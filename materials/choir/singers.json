@@ -1,0 +1,10 @@
+{
+  "singers": [
+    {"singer": "甲", "kind": "member", "fee": 0, "available": true},
+    {"singer": "乙", "kind": "member", "fee": 0, "available": true},
+    {"singer": "丙", "kind": "guest", "fee": 3, "available": true},
+    {"singer": "丁", "kind": "member", "fee": 0, "available": true},
+    {"singer": "戊", "kind": "member", "fee": 0, "available": true},
+    {"singer": "己", "kind": "guest", "fee": 2, "available": true}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "scores": [
+    {"score_id": "S0", "label": "原调", "transpose": 0, "fee": 0},
+    {"score_id": "S1", "label": "全曲+1", "transpose": 1, "fee": 1},
+    {"score_id": "S-1", "label": "全曲-1", "transpose": -1, "fee": 2}
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "file_id": "aud-ending-signed",
+  "writer_version": "w-choir",
+  "reader_version": "r-choir",
+  "rows": [
+    {
+      "row_id": "y1",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-SIGNED",
+        "singer": "甲",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "y2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-SIGNED",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": 6,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "y3",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-SIGNED",
+        "singer": "甲",
+        "seq": 2,
+        "pitch": null,
+        "kind": "end",
+        "ending": "甲签字"
+      }
+    }
+  ]
+}

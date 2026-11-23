@@ -1,0 +1,35 @@
+{
+  "version": "w-choir-noending",
+  "fields": [
+    {
+      "field_id": "audition",
+      "name": "audition",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    },
+    {
+      "field_id": "singer",
+      "name": "singer",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    },
+    {
+      "field_id": "seq",
+      "name": "position",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": false
+    },
+    {
+      "field_id": "pitch",
+      "name": "pitch",
+      "type": {"kind": "INT", "bits": 8},
+      "nullable": true
+    },
+    {
+      "field_id": "kind",
+      "name": "kind",
+      "type": {"kind": "TEXT"},
+      "nullable": false
+    }
+  ]
+}

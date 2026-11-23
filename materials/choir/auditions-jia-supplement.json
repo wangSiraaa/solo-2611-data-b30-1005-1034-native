@@ -1,0 +1,67 @@
+{
+  "file_id": "aud-jia-supplement",
+  "writer_version": "w-choir",
+  "reader_version": "r-choir",
+  "rows": [
+    {
+      "row_id": "e1",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-8",
+        "singer": "甲",
+        "seq": 0,
+        "pitch": 5,
+        "kind": "onset",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "e2",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-8",
+        "singer": "甲",
+        "seq": 1,
+        "pitch": 6,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "e3",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-8",
+        "singer": "甲",
+        "seq": 2,
+        "pitch": 7,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "e4",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-8",
+        "singer": "甲",
+        "seq": 3,
+        "pitch": 8,
+        "kind": "sample",
+        "ending": null
+      }
+    },
+    {
+      "row_id": "e5",
+      "revision": 1,
+      "values": {
+        "audition": "A-JIA-5-8",
+        "singer": "甲",
+        "seq": 4,
+        "pitch": null,
+        "kind": "end",
+        "ending": "甲补签字"
+      }
+    }
+  ]
+}

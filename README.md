@@ -265,6 +265,67 @@ No arbitrary type inference, no Arrow Union, no online database migration.
 
 ---
 
+## 4. Choir auditions & whole-performance scoring (`extcontract/choir.py`)
+
+A downstream module that reuses the ingestion library rather than duplicating
+it: real audition files are ingested by an `IngestionLibrary`, and all
+evidence is read from the published `reader-records/v1` snapshot (with its
+`sources` provenance). Nothing is trusted from the raw file.
+
+### Evidence rules
+
+An audition is one actual onset, an ordered string of measured integer
+semitones, and one ending, all tied to a singer, one audition id, and a
+position (`seq`).
+
+* A **complete** audition proves a continuous range from its lowest to highest
+  **measured** pitch only when every pair of adjacent measurements differs by at
+  most one semitone. A leap, a missing measurement, a same-audition/same-position
+  conflict, or an unsigned ending signs **no** continuous range.
+* The ending row is an **arrival signature**, not a measurement. A reader
+  `default` (`conversion: "fill_default"`) can never act as a signature, even
+  when the text happens to be `完成`.
+* A complete, signed one-note audition registers as a single-point region.
+* Proven regions that share a pitch (overlap or equal endpoint) merge at that
+  pitch; two merely adjacent regions with no common measured pitch never
+  bridge. The coach can query proven ranges but cannot paint everything between
+  two isolated notes as singable.
+
+### Performance rules / optimisation
+
+* One pianist uses **one** score for the whole piece; each score transposes all
+  voices and instrumental overpasses by a fixed integer number of semitones
+  (the original key is one score).
+* An overpass may be played only if its actual pitch is in the orchestra's
+  available absolute-pitch set; otherwise that score is unusable.
+* A phrase must fall wholly inside **one** proven region of its singer.
+* Within a voice, an adjacent phrase may change singer only across a hand-over
+  rest; each change is one switch.
+* Regular members are free; a guest pays one fixed fee for the whole piece.
+* `solve(..., mode="budget", cap=…)` minimises switches then cost under a total
+  spend cap; `mode="switch", cap=…` minimises cost then switches under a switch
+  cap.
+
+The piece/scores/roster and every audition set live in `materials/choir/`.
+Run the mandated scenario end-to-end:
+
+```bash
+PYTHONPATH=. python3.11 examples/run_choir_demo.py
+```
+
+It covers: original auditions and merged proven ranges; the coach's refusal to
+paint 6..9 for 甲; original key with a rest hand-over (甲→乙, 0 cost, 1 switch);
+no-switch original key (paid guest 丙, cost 3); the +1 score at zero switches
+(cost 1); a single continuous 6..9 phrase 甲 cannot bluff; the 5,6,7,8
+supplement making the original free at zero switches; a band limited to 7
+forcing the original-key guest; an isolated 5-and-9 singer with no whole-piece
+score; a default-filled ending failing to sign; a real ending signing; and
+leap / missing-measurement / unsigned / same-audition-same-position defects
+(including a same-position clash with distinct `row_id`s that ingestion accepts
+but evidence refuses).
+
+---
+
 ## Templates for the mandated scenario
 
 `fixtures/bootstrap.json`, `fixtures/F-BAD.json`, `fixtures/F-NEW.json` are the
