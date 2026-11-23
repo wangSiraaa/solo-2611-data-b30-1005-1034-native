@@ -1,0 +1,11 @@
+{
+  "file_id": "F-BOOT-master",
+  "writer_version": "station-master-writer-v1",
+  "reader_version": "station-master-reader-v1",
+  "rows": [
+    {"row_id": "A-0", "revision": 1, "values": {"station": "A", "dock_idx": 0, "bike_id": "B1", "status": "ready"}},
+    {"row_id": "A-1", "revision": 1, "values": {"station": "A", "dock_idx": 1, "bike_id": null, "status": "empty"}},
+    {"row_id": "B-0", "revision": 1, "values": {"station": "B", "dock_idx": 0, "bike_id": "B4", "status": "in_transit"}},
+    {"row_id": "B-1", "revision": 1, "values": {"station": "B", "dock_idx": 1, "bike_id": "B3", "status": "ready"}}
+  ]
+}

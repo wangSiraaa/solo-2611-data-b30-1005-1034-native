@@ -1,0 +1,11 @@
+{
+  "version": "reservation-writer-v1",
+  "fields": [
+    {"field_id": "ride_no", "name": "ride_no", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "rider", "name": "rider", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "pickup_tick", "name": "pickup beat", "type": {"kind": "INT", "bits": 8}, "nullable": false},
+    {"field_id": "pickup_station", "name": "pickup station", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "return_tick", "name": "return beat", "type": {"kind": "INT", "bits": 8}, "nullable": false},
+    {"field_id": "return_station", "name": "default return station", "type": {"kind": "TEXT"}, "nullable": false}
+  ]
+}

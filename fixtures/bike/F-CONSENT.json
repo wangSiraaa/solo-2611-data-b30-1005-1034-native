@@ -1,0 +1,8 @@
+{
+  "file_id": "F-CONSENT",
+  "writer_version": "consent-writer-v1",
+  "reader_version": "consent-reader-v1",
+  "rows": [
+    {"row_id": "consent-jia", "revision": 1, "values": {"rider": "jia", "ride_no": "jia", "points": 2, "alt_station": "B"}}
+  ]
+}

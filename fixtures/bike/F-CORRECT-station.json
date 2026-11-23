@@ -1,0 +1,8 @@
+{
+  "file_id": "F-CORRECT-station",
+  "writer_version": "station-full-v1",
+  "reader_version": "handover-reader-v1",
+  "rows": [
+    {"row_id": "B2-return-station", "revision": 2, "values": {"bike_id": "B2", "ride_no": "R9", "event": "entry", "station": "B", "dock_idx": 1, "tick": 1, "bike_sign": null, "station_sign": "good"}}
+  ]
+}

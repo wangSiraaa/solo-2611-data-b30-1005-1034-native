@@ -46,6 +46,13 @@ Full mandated scenario (F-BAD / F-NEW, narrowed readers, INT16, DECIMAL, nullabl
 PYTHONPATH=. python3.11 examples/run_745_demo.py
 ```
 
+Bike-show overnight handover and next-day group ride (two-sided receipts,
+frozen ledgers, reward-vs-truck dispatch planning):
+
+```bash
+PYTHONPATH=. python3.11 examples/run_bike_demo.py
+```
+
 Tests (pytest):
 
 ```bash
@@ -289,7 +296,43 @@ extcontract/
   adapter.py    per-row validation + plan application -> reader-records/v1
   ingest.py     revision-aware, atomic, idempotent target state
   cli.py        compat / adapt / ingest commands
-examples/run_745_demo.py   end-to-end scenario against the real client
-fixtures/                  bootstrap, F-BAD, F-NEW documents
-tests/                     compat, adapter, ingest, fixtures, scale
+  bike/         bike-show handover reconciliation and ride dispatch planner
+    domain.py      frozen domain objects and the bounded scenario model
+    ingest_files.py loads the real station/bike/master/consent/reservation files
+    reconcile.py   two-sided handover pairing -> frozen dawn ledger
+    ride.py        exhaustive reservation/reward/truck planner
+    scenario.py    ledger + reservations -> planner scenario
+examples/run_745_demo.py    end-to-end 745 scenario against the real client
+examples/run_bike_demo.py  three bike-show cases + full-station refusal
+fixtures/                  bootstrap, F-BAD, F-NEW, and fixtures/bike/*
+tests/                     compat, adapter, ingest, fixtures, scale, bike/*
 ```
+
+## Bike-show subsystem (`extcontract/bike/`)
+
+A layered application of the same ingestion guarantees to a physical
+handover problem.
+
+* **Real files, real contracts.** Station docking rows, per-bike trip rows,
+  the opening station master, reward consents and reservations each have a
+  declared writer contract and a fixed reader contract under
+  `materials/bike/`. They are ingested atomically with the normal revision
+  rules; a corrected receipt is simply a higher revision.
+* **A reader default is not a real sign-off.** The handover reader fills a
+  missing `station_sign` with `"good"`, but the adapted `sources` record
+  `fill_default`. Reconciliation treats such a row as a one-sided candidate:
+  it can never complete a loan or return, and an unconfirmed entry becomes a
+  *pending placeholder* dock that is never promised to another bike.
+* **Completion rule.** Same bike, same real ride number, both sides really
+  signed, and time chained onto the previous real custody; a return also
+  requires an open in-transit ride of that number. In-transit, unaccepted and
+  contradicted bikes are never dawn-lendable. A corrected receipt rebuilds a
+  second `FrozenLedger` (per-bike location, missing credentials, block
+  origin, per-station usable docks) without rewriting the first.
+* **Dispatch planning.** Fixed reservations, optional fixed-point reward
+  re-docking (return beat unchanged) and one capacity-bounded truck moving one
+  priced edge per beat. Each tick is processed returns → truck load/unload →
+  pickups, with capacity checked on the stage totals. The bounded space is
+  searched exhaustively, so the minimum transport fee (minimum reward on
+  ties, or minimum reward under a fee limit) is optimal; estimated plans are
+  tagged and never recorded as dispatches.

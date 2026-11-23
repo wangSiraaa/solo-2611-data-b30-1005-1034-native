@@ -1,0 +1,9 @@
+{
+  "version": "consent-reader-v1",
+  "fields": [
+    {"field_id": "rider", "name": "rider", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "ride_no", "name": "ride_no", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "points", "name": "fixed reward points", "type": {"kind": "INT", "bits": 16}, "nullable": false},
+    {"field_id": "alt_station", "name": "agreed alternative return station", "type": {"kind": "TEXT"}, "nullable": false}
+  ]
+}

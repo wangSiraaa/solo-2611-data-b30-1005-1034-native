@@ -1,0 +1,13 @@
+{
+  "version": "handover-reader-v1",
+  "fields": [
+    {"field_id": "bike_id", "name": "bike identity", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "ride_no", "name": "real ride number", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "event", "name": "exit or entry", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "station", "name": "station at which the dock stands", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "dock_idx", "name": "dock index, null when still on the road", "type": {"kind": "INT", "bits": 8}, "nullable": true},
+    {"field_id": "tick", "name": "whole-beat timestamp", "type": {"kind": "INT", "bits": 8}, "nullable": false},
+    {"field_id": "bike_sign", "name": "bike-side real sign-off", "type": {"kind": "TEXT"}, "nullable": true},
+    {"field_id": "station_sign", "name": "station-side real sign-off", "type": {"kind": "TEXT"}, "nullable": false, "default": "good"}
+  ]
+}

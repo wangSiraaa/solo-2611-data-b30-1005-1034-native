@@ -1,0 +1,9 @@
+{
+  "version": "station-master-reader-v1",
+  "fields": [
+    {"field_id": "station", "name": "station", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "dock_idx", "name": "dock index", "type": {"kind": "INT", "bits": 16}, "nullable": false},
+    {"field_id": "bike_id", "name": "opening physical bike, null for an empty dock", "type": {"kind": "TEXT"}, "nullable": true},
+    {"field_id": "status", "name": "opening bike status", "type": {"kind": "TEXT"}, "nullable": false}
+  ]
+}

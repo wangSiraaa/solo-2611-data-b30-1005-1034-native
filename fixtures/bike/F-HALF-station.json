@@ -1,0 +1,8 @@
+{
+  "file_id": "F-HALF-station",
+  "writer_version": "station-half-v1",
+  "reader_version": "handover-reader-v1",
+  "rows": [
+    {"row_id": "B2-return-station", "revision": 1, "values": {"bike_id": "B2", "ride_no": "R9", "event": "entry", "station": "B", "dock_idx": null, "tick": 1, "bike_sign": null}}
+  ]
+}

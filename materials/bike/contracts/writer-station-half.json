@@ -1,0 +1,12 @@
+{
+  "version": "station-half-v1",
+  "fields": [
+    {"field_id": "bike_id", "name": "bike_id", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "ride_no", "name": "ride_no", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "event", "name": "event", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "station", "name": "station", "type": {"kind": "TEXT"}, "nullable": false},
+    {"field_id": "dock_idx", "name": "dock_idx", "type": {"kind": "INT", "bits": 8}, "nullable": true},
+    {"field_id": "tick", "name": "tick", "type": {"kind": "INT", "bits": 8}, "nullable": false},
+    {"field_id": "bike_sign", "name": "bike-side sign-off, never known by the station stream", "type": {"kind": "TEXT"}, "nullable": true}
+  ]
+}

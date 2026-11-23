@@ -1,0 +1,9 @@
+{
+  "file_id": "F-RESERVATIONS",
+  "writer_version": "reservation-writer-v1",
+  "reader_version": "reservation-reader-v1",
+  "rows": [
+    {"row_id": "res-jia", "revision": 1, "values": {"ride_no": "jia", "rider": "jia", "pickup_tick": 0, "pickup_station": "A", "return_tick": 2, "return_station": "A"}},
+    {"row_id": "res-yi", "revision": 1, "values": {"ride_no": "yi", "rider": "yi", "pickup_tick": 3, "pickup_station": "B", "return_tick": 4, "return_station": "B"}}
+  ]
+}

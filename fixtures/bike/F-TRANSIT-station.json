@@ -1,0 +1,8 @@
+{
+  "file_id": "F-TRANSIT-station",
+  "writer_version": "station-half-v1",
+  "reader_version": "handover-reader-v1",
+  "rows": [
+    {"row_id": "B3-exit-station", "revision": 1, "values": {"bike_id": "B3", "ride_no": "R8", "event": "exit", "station": "B", "dock_idx": null, "tick": 0, "bike_sign": null}}
+  ]
+}
